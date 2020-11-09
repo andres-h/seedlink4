@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<seiscomp>
+	<module name="seedlink4" category="Acquisition">
+		<description>SeedLink4 server</description>
+		<command-line>
+			<group name="Generic">
+				<optionReference>generic#help</optionReference>
+				<optionReference>generic#version</optionReference>
+				<optionReference>generic#config-file</optionReference>
+				<optionReference>generic#plugins</optionReference>
+				<optionReference>generic#daemon</optionReference>
+			</group>
+
+			<group name="Verbosity">
+				<optionReference>verbosity#verbosity</optionReference>
+				<optionReference>verbosity#v</optionReference>
+				<optionReference>verbosity#quiet</optionReference>
+				<optionReference>verbosity#print-component</optionReference>
+				<optionReference>verbosity#print-context</optionReference>
+				<optionReference>verbosity#component</optionReference>
+				<optionReference>verbosity#syslog</optionReference>
+				<optionReference>verbosity#lockfile</optionReference>
+				<optionReference>verbosity#console</optionReference>
+				<optionReference>verbosity#debug</optionReference>
+				<optionReference>verbosity#trace</optionReference>
+				<optionReference>verbosity#log-file</optionReference>
+			</group>
+
+			<group name="Server">
+				<option long-flag="port" argument="int" param-ref="port"/>
+				<option long-flag="filebase" argument="string" param-ref="filebase"/>
+				<option long-flag="segments" argument="int" param-ref="segments"/>
+				<option long-flag="segsize" argument="int" param-ref="segsize"/>
+				<option long-flag="recsize" argument="int" param-ref="recsize"/>
+			</group>
+		</command-line>
+
+		<configuration>
+			<parameter name="port" type="int" default="18000">
+				<description>
+				Defines the TCP port for SeedLink connections. By default
+				the SeedLink standard port 18000 will be used.
+				</description>
+			</parameter>
+			<parameter name="filebase" type="string" default="@ROOTDIR@/var/lib/seedlink4">
+				<description>
+				Defines the location of storage.
+				</description>
+			<parameter name="segments" type="int" default="10">
+				<description>
+				The ringbuffer is currenly segment-based. This parameter defines the
+				number of segments per station. By default, 10 segments will be used.
+				</description>
+			</parameter>
+			<parameter name="segsize" type="int" default="1000">
+				<description>
+				Defines the segment size in records. By default, 1000 records will be
+				used.
+				</description>
+			</parameter>
+			<parameter name="recsize" type="int" default="10240">
+				<description>
+				Defines the maximum record size, including metadata header.
+			       	The default is 10240 bytes.
+				</description>
+			</parameter>
+		</configuration>
+	</module>
+</seiscomp>
