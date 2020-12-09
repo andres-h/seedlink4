@@ -115,7 +115,7 @@ ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &p) {
 
 	string payload((char *)buf, (1 << head->data_record_length));
 
-	p = new Record(net, sta, loc, cha, starttime, timespan, FMT_MSEED24, payload);
+	p = new Record(net, sta, loc, cha, "D", starttime, timespan, FMT_MSEED24, payload);
 
 	return payload.size();
 }

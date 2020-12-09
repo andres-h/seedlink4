@@ -16,6 +16,7 @@
 #define SEISCOMP_COMPONENT SEEDLINK
 #include <seiscomp/logging/log.h>
 #include <seiscomp/core/strings.h>
+#include <seiscomp/client/inventory.h>
 
 #include "session.h"
 #include "settings.h"
@@ -36,7 +37,8 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 	public:
 		SeedlinkSession(Wired::Socket *sock,
 			       	StoragePtr storage,
-				const map<FormatCode, FormatPtr> &formats);
+				const map<FormatCode, FormatPtr> &formats,
+				const map<string, string> &descriptions);
 
 		~SeedlinkSession();
 
@@ -52,6 +54,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		SessionType _type;
 		StoragePtr _storage;
 		const map<FormatCode, FormatPtr> &_formats;
+		const map<string, string> &_descriptions;
 		list<FormatCode> _accept;
 		map<string, CursorPtr> _stations;
 		set<CursorPtr> _cursorsAvail;
@@ -86,7 +89,18 @@ SeedlinkListener::SeedlinkListener(const Wired::IPACL &allowedIPs,
 				 const map<FormatCode, FormatPtr> &formats,
                                  Wired::Socket *socket)
 : Wired::AccessControlledEndpoint(socket, allowedIPs, deniedIPs)
-, _storage(storage), _formats(formats) {}
+, _storage(storage), _formats(formats) {
+	DataModel::Inventory* inv = Client::Inventory::Instance()->inventory();
+	for ( unsigned int i = 0; i < inv->networkCount(); ++i ) {
+		DataModel::Network* net = inv->network(i);
+		for ( unsigned int j = 0; j < net->stationCount(); ++j ) {
+			DataModel::Station* sta = net->station(j);
+			_descriptions.insert(pair<string, string>(
+						net->code() + "." + sta->code(),
+						sta->description()));
+		}
+	}
+}
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
@@ -95,7 +109,7 @@ SeedlinkListener::SeedlinkListener(const Wired::IPACL &allowedIPs,
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 	socket->setMode(Wired::Socket::Read);
-	return new SeedlinkSession(socket, _storage, _formats);
+	return new SeedlinkSession(socket, _storage, _formats, _descriptions);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -106,9 +120,11 @@ Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 				 StoragePtr storage,
-                                 const map<FormatCode, FormatPtr> &formats)
+				 const map<FormatCode, FormatPtr> &formats,
+				 const map<string, string> &descriptions)
 : Wired::ClientSession(sock, 200)
-, _type(Unspecific), _storage(storage), _formats(formats), _wildcard(false), _transfer(false) {}
+, _type(Unspecific), _storage(storage), _formats(formats), _descriptions(descriptions)
+, _wildcard(false), _transfer(false) {}
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
@@ -176,6 +192,22 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		sendResponse("SeedLink4 v" SEEDLINK4_VERSION_NAME " :: SLPROTO:4.0 ASYNC MULTISTATION TIME\r\n");
 		sendResponse(global.organization.c_str(), static_cast<int>(global.organization.size()));
 		sendResponse("\r\n");
+		return;
+	}
+
+	if ( tokLen == 3 && strncasecmp(tok, "CAT", tokLen) == 0 ) {
+		for ( const auto &name : _storage->cat() ) {
+			size_t sep = name.find_first_of('.');
+			if ( sep != string::npos ) {
+				string net = name.substr(0, sep);
+				string sta = name.substr(sep + 1);
+				auto descIt = _descriptions.find(name);
+				string desc = (descIt != _descriptions.end())? descIt->second: sta;
+				sendResponse((net + " " + sta + " " + desc + "\r\n").c_str());
+			}
+		}
+
+		sendResponse("END");
 		return;
 	}
 
@@ -292,6 +324,11 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		}
 
 		startTransfer();
+		return;
+	}
+
+	if ( tokLen == 3 && strncasecmp(tok, "BYE", tokLen) == 0 ) {
+		close();
 		return;
 	}
 }
@@ -411,9 +448,11 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 		}
 	}
 
-	if ( t.size() > 7 ) {
+	if ( t.size() == 6 )
+		t.push_back(0);
+
+	if ( t.size() != 7 )
 		return Core::Time::Null;
-	}
 
 	return Core::Time(t[0], t[1], t[2], t[3], t[4], t[5], t[6] / 1000);
 }

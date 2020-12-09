@@ -17,6 +17,7 @@
 #include <set>
 #include <map>
 #include <deque>
+#include <regex>
 
 #include <seiscomp/core/baseobject.h>
 #include <seiscomp/core/datetime.h>
@@ -62,6 +63,23 @@ class Segment : public Core::BaseObject {
 };
 
 
+DEFINE_SMARTPOINTER(Selector);
+class Selector : public Core::BaseObject {
+	public:
+		bool init(const std::string &selstr);
+		bool match(RecordPtr rec);
+		bool negative() { return _neg; }
+
+	private:
+		bool _neg;
+		std::regex _rloc;
+		std::regex _rcha;
+		std::regex _rtype;
+
+		bool initPattern(std::regex &r, const std::string &s, bool simple = false);
+};
+
+
 class CursorOwner;
 class CursorClient;
 
@@ -103,8 +121,10 @@ class Cursor : public Core::BaseObject {
 		bool _eod;
 		Core::Time _starttime;
 		Core::Time _endtime;
-		std::list<std::string> _selectors;
+		std::list<SelectorPtr> _selectors;
 		std::set<FormatCode> _formats;
+
+		bool match(RecordPtr rec);
 };
 
 
@@ -126,6 +146,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		Ring(const std::string &path, const std::string &name, int nsegments, int segsize, int blocksize);
 		Ring(const std::string &path, const std::string &name);
 
+		bool check(int nsegments, int segsize, int blocksize);
 		bool put(RecordPtr buf, Sequence seq, bool seq24bit);
 		CursorPtr cursor(CursorClient &client);
 
@@ -155,6 +176,13 @@ class Storage : public Core::BaseObject {
 			     int recsize);
 
 		RingPtr ring(const std::string &name);
+
+		bool checkRing(const std::string &name,
+			     int nsegments,
+			     int segsize,
+			     int recsize);
+
+		std::vector<std::string> cat();
 
 	private:
 		const std::string _path;

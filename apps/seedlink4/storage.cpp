@@ -184,6 +184,105 @@ RecordPtr Segment::get(Sequence seq) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Selector::initPattern(regex &r, const string &src, bool simple) {
+	if ( src.length() == 0 ) {
+		r = regex(".*");
+		return true;
+	}
+
+	if (simple) {
+		if ( !regex_match(src, regex("[A-Z0-9\\-\\?]*")) )
+			return false;
+	}
+	else {
+		if ( !regex_match(src, regex("[A-Z0-9\\-\\?\\*]*")) )
+			return false;
+	}
+
+	string s = regex_replace(src, regex("-"), " ");
+	s = regex_replace(s, regex("\\?"), ".");
+
+	if ( !simple )
+		s = regex_replace(s, regex("\\*"), ".*");
+
+	r = regex(s);
+	return true;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Selector::init(const string &selstr) {
+	string loc = "";
+	string cha = "";
+	string type = "";
+	bool simple = false;
+	string s;
+
+	if (selstr[0] == '!') {
+		_neg = true;
+		s = selstr.substr(1);
+	}
+	else {
+		_neg = false;
+		s = selstr;
+	}
+
+	size_t p = s.find_first_of('.');
+
+	if ( p != string::npos ) {
+		type = s.substr(p + 1);
+		s = s.substr(0, p);
+	}
+
+	p = s.find_first_of(':');
+
+	if ( p != string::npos ) {
+		loc = s.substr(0, p);
+		cha = s.substr(p + 1);
+	}
+	else {
+		// legacy format
+		simple = true;
+
+		if ( s.length() == 5 ) {
+			loc = s.substr(0, 2);
+			cha = s.substr(2);
+		}
+		else if ( s.length() == 3 ) {
+			cha = s;
+		}
+		else if ( s.length() == 1 && selstr.length() == 1) {
+			type = s;
+		}
+		else if ( s.length() != 0 ) {
+			return false;
+		}
+	}
+
+	return (initPattern(_rloc, loc, simple) &&
+		initPattern(_rcha, cha, simple) &&
+		initPattern(_rtype, type, simple) );
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Selector::match(RecordPtr rec) {
+	return (regex_match(rec->locationCode(), _rloc) &&
+		regex_match(rec->channelCode(), _rcha) &&
+		regex_match(rec->typeCode(), _rtype));
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Cursor::~Cursor() {
 	_owner.removeCursor(this);
 }
@@ -258,13 +357,17 @@ void Cursor::setEnd(Core::Time t) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Cursor::select(const string &sel) {
-	if ( sel.length() == 0 )
+bool Cursor::select(const string &selstr) {
+	if ( selstr.length() == 0 ) {
 		_selectors.clear();
-	else
-		_selectors.push_back(sel);
+		return true;
+	}
 
-	// TODO: parse selector
+	SelectorPtr sel = new Selector();
+	if ( !sel->init(selstr) )
+		return false;
+
+	_selectors.push_back(sel);
 	return true;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -278,6 +381,29 @@ void Cursor::accept(FormatCode format) {
 		_formats.clear();
 	else
 		_formats.insert(format);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Cursor::match(RecordPtr rec) {
+	if ( _formats.size() != 0 && _formats.find(rec->format()) == _formats.end() )
+		return false;
+
+	bool default_rule = true, result = false;
+	for ( auto i = _selectors.begin(); i != _selectors.end(); ++i ) {
+		if ( (*i)->negative() ) {
+			if ( (*i)->match(rec) ) return false;
+		}
+		else {
+			default_rule = false;
+			result |= (*i)->match(rec);
+		}
+	}
+
+	return (default_rule || result);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -317,14 +443,15 @@ RecordPtr Cursor::next() {
 			rec = s->get(_seq++);
 
 			if ( rec &&
-			     _formats.find(rec->format()) != _formats.end() &&
-			     /* TODO: selector match */
 			     (_starttime == Core::Time::Null || rec->startTime() + rec->timeSpan() >= _starttime) ) {
 				if ( _endtime != Core::Time::Null && rec->startTime() > _endtime ) {
 					_eod = true;
 					_owner.removeCursor(this);
 					return NULL;
 				}
+
+				if ( !match(rec) )
+					continue;
 
 				_has_data = true;
 				return rec;
@@ -382,12 +509,12 @@ Ring::Ring(const string &path, const string &name, int nsegments, int segsize, i
 	const string jsonfile = _path + "/ring.json";
 
 	if ( !Util::pathExists(segpath) && !Util::createPath(segpath) )
-		throw runtime_error(string("could not create ") + segpath);
+		throw runtime_error("could not create " + segpath);
 
 	IO::JSONArchive ar;
 
 	if ( !ar.create(jsonfile.c_str(), false) )
-		throw runtime_error(string("could not create " + jsonfile));
+		throw runtime_error("could not create " + jsonfile);
 
 	ar & NAMED_OBJECT_HINT("nsegments", _nsegments, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("segsize", _segsize, Core::Archive::STATIC_TYPE);
@@ -415,7 +542,7 @@ Ring::Ring(const string &path, const string &name)
 	IO::JSONArchive ar;
 
 	if ( !ar.open(jsonfile.c_str()) )
-		throw runtime_error(string("could not open " + jsonfile));
+		throw runtime_error("could not open " + jsonfile);
 
 	ar & NAMED_OBJECT_HINT("nsegments", _nsegments, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("segsize", _segsize, Core::Archive::STATIC_TYPE);
@@ -434,10 +561,10 @@ Ring::Ring(const string &path, const string &name)
 			unsigned long long seq = stoull(fname, &end, 16);
 
 			if ( end != fname.length() || seq == UNSET)
-				throw runtime_error(string("invalid ringbuffer (file name) at ") + segpath);
+				throw runtime_error("invalid ringbuffer (file name) at " + segpath);
 
 			if ( boost::filesystem::file_size(i->path()) != size_t(_segsize * _blocksize) )
-				throw runtime_error(string("invalid ringbuffer (file size) at ") + segpath);
+				throw runtime_error("invalid ringbuffer (file size) at " + segpath);
 
 			if ( seq < _baseseq )
 				_baseseq = seq;
@@ -445,7 +572,7 @@ Ring::Ring(const string &path, const string &name)
 			seqs.insert(seq);
 		}
 		catch(const invalid_argument&) {
-			throw runtime_error(string("invalid ringbuffer (file name) at ") + segpath);
+			throw runtime_error("invalid ringbuffer (file name) at " + segpath);
 		}
 	}
 
@@ -463,7 +590,7 @@ Ring::Ring(const string &path, const string &name)
 	}
 
 	if ( !seqs.empty() )
-		throw runtime_error(string("invalid ringbuffer (unexpected file) at ") + segpath);
+		throw runtime_error("invalid ringbuffer (unexpected file) at " + segpath);
 
 	if ( _baseseq == UNSET )
 		_baseseq = 0;
@@ -473,7 +600,45 @@ Ring::Ring(const string &path, const string &name)
 
 
 
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+bool Ring::check(int nsegments, int segsize, int blocksize) {
+	bool result = true;
+
+	if ( _nsegments != nsegments ) {
+		SEISCOMP_WARNING("found existing ring %s with number of segments = %d (requested %d)",
+				_name.c_str(),
+				_nsegments,
+				nsegments);
+
+		result = false;
+	}
+
+	if ( _segsize != segsize ) {
+		SEISCOMP_WARNING("found existing ring %s with segment size = %d (requested %d)",
+				_name.c_str(),
+				_segsize,
+				segsize);
+
+		result = false;
+	}
+
+	if ( _blocksize != blocksize ) {
+		SEISCOMP_WARNING("found existing ring %s with block size = %d (requested %d)",
+				_name.c_str(),
+				_blocksize,
+				blocksize);
+
+		result = false;
+	}
+
+	return result;
+}
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 bool Ring::put(RecordPtr rec, Sequence seq, bool seq24bit) {
 	if ( seq == UNSET )
 		seq = _endseq;
@@ -600,6 +765,39 @@ RingPtr Storage::ring(const string &name) {
 		return i->second;
 
 	return NULL;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Storage::checkRing(const string &name,
+			    int nsegments,
+			    int segsize,
+			    int blocksize) {
+	RingPtr ring = Storage::ring(name);
+
+	if ( ring )
+		return ring->check(nsegments, segsize, blocksize);
+	else
+		createRing(name, nsegments, segsize, blocksize);
+
+	return true;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+vector<string> Storage::cat() {
+	vector<string> result;
+	result.reserve(_rings.size());
+	for ( auto i : _rings )
+		result.push_back(i.first);
+
+	return result;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

@@ -15,6 +15,7 @@
 #define SEISCOMP_COMPONENT SEEDLINK
 #include <seiscomp/logging/log.h>
 #include <seiscomp/core/strings.h>
+#include <seiscomp/utils/bindings.h>
 
 #include "app.h"
 #include "settings.h"
@@ -37,7 +38,9 @@ namespace Seedlink {
 Application::Application(int argc, char** argv)
 : Client::Application(argc, argv) {
 	setMessagingEnabled(false);
-	setDatabaseEnabled(false, false);
+	setDatabaseEnabled(true, true);
+	setLoadConfigModuleEnabled(true);
+	setLoadStationsEnabled(true);
 	bindSettings(&global);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -54,9 +57,9 @@ bool Application::init() {
 		return false;
 
 	SEISCOMP_INFO("Storage location: %s", global.filebase.c_str());
-	SEISCOMP_INFO("Number of segments per station: %d", global.segments);
-	SEISCOMP_INFO("Segment size in records: %d", global.segsize);
-	SEISCOMP_INFO("Maximum record size: %d", global.recsize);
+	SEISCOMP_INFO("Default number of segments per station: %d", global.segments);
+	SEISCOMP_INFO("Default segment size in records: %d", global.segsize);
+	SEISCOMP_INFO("Default maximum record size: %d", global.recsize);
 
 	_server.setTriggerMode(Wired::DeviceGroup::LevelTriggered);
 
@@ -64,6 +67,38 @@ bool Application::init() {
 
 	try {
 		StoragePtr storage = new Storage(global.filebase);
+		Util::BindingsPtr bindings = new Util::Bindings();
+		bindings->init(configModule(), "seedlink", false);
+		for ( Util::Bindings::const_iterator i = bindings->begin(); i != bindings->end(); ++i ) {
+			const Util::KeyValues* keys = i.keys();
+
+			int segments = global.segments;
+			if ( !keys->getInt(segments, "segments") )
+				SEISCOMP_INFO("%s %s using default segments = %d",
+						i.networkCode().c_str(),
+						i.stationCode().c_str(),
+						segments);
+
+			int segsize = global.segsize;
+			if ( ! keys->getInt(segsize, "segsize") )
+				SEISCOMP_INFO("%s %s using default segsize = %d",
+						i.networkCode().c_str(),
+						i.stationCode().c_str(),
+						segsize);
+
+			int recsize = global.recsize;
+			if ( !keys->getInt(recsize, "recsize") )
+				SEISCOMP_INFO("%s %s using default recsize = %d",
+						i.networkCode().c_str(),
+						i.stationCode().c_str(),
+						recsize);
+
+			storage->checkRing(i.networkCode() + "." + i.stationCode(),
+					segments,
+					segsize,
+					recsize);
+		}
+
 		map<FormatCode, FormatPtr> formats;
 		formats.insert(pair<FormatCode, FormatPtr>(FMT_MSEED24, new Mseed24Format()));
 

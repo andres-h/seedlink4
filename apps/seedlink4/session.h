@@ -41,6 +41,7 @@ class SeedlinkListener : public Wired::AccessControlledEndpoint {
 
 	private:
 		StoragePtr _storage;
+		std::map<std::string, std::string> _descriptions;
 		std::map<FormatCode, FormatPtr> _formats;
 
 		Wired::Session *createSession(Wired::Socket *socket) override;
