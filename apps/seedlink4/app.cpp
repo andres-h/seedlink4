@@ -16,6 +16,7 @@
 #include <seiscomp/logging/log.h>
 #include <seiscomp/core/strings.h>
 #include <seiscomp/utils/bindings.h>
+#include <seiscomp/utils/files.h>
 
 #include "app.h"
 #include "settings.h"
@@ -67,9 +68,17 @@ bool Application::init() {
 
 	try {
 		StoragePtr storage = new Storage(global.filebase);
+
+		map<FormatCode, FormatPtr> formats;
+		formats.insert(pair<FormatCode, FormatPtr>(FMT_MSEED24, new Mseed24Format()));
+
+		ACL trusted(global.trusted);
+		ACL defaultAccess(global.access);
+		map<string, ACL> access;
+
 		Util::BindingsPtr bindings = new Util::Bindings();
 		bindings->init(configModule(), "seedlink", false);
-		for ( Util::Bindings::const_iterator i = bindings->begin(); i != bindings->end(); ++i ) {
+		for ( auto i = bindings->begin(); i != bindings->end(); ++i ) {
 			const Util::KeyValues* keys = i.keys();
 
 			int segments = global.segments;
@@ -80,7 +89,7 @@ bool Application::init() {
 						segments);
 
 			int segsize = global.segsize;
-			if ( ! keys->getInt(segsize, "segsize") )
+			if ( !keys->getInt(segsize, "segsize") )
 				SEISCOMP_INFO("%s %s using default segsize = %d",
 						i.networkCode().c_str(),
 						i.stationCode().c_str(),
@@ -93,18 +102,48 @@ bool Application::init() {
 						i.stationCode().c_str(),
 						recsize);
 
-			storage->checkRing(i.networkCode() + "." + i.stationCode(),
-					segments,
-					segsize,
-					recsize);
-		}
+			RingPtr ring = storage->ring(i.networkCode() + "." + i.stationCode());
 
-		map<FormatCode, FormatPtr> formats;
-		formats.insert(pair<FormatCode, FormatPtr>(FMT_MSEED24, new Mseed24Format()));
+			if ( ring )
+				ring->check(segments, segsize, recsize);
+			else
+				ring = storage->createRing(i.networkCode() + "." + i.stationCode(),
+							   segments,
+							   segsize,
+							   recsize);
+
+			string accessStr = global.access;
+			if ( !keys->getString(accessStr, "access") )
+				SEISCOMP_INFO("%s %s using default access = %s",
+						i.networkCode().c_str(),
+						i.stationCode().c_str(),
+						accessStr.c_str());
+
+			if ( accessStr.length() > 0 )
+				access.insert(pair<string, ACL>(i.networkCode() + "." + i.stationCode(), accessStr));
+		}
 
 		_server.addEndpoint(Wired::Socket::IPAddress(), global.port, false,
 				    new SeedlinkListener(globalClientAllow, globalClientDeny,
-							 storage, formats));
+							 storage, formats, trusted, defaultAccess, access));
+
+		if ( global.sslport > 0 ) {
+			if ( global.certificate.length() == 0 || !Util::fileExists(global.certificate) ) {
+				SEISCOMP_ERROR("missing SSL certificate");
+				return false;
+			}
+
+			if ( global.privateKey.length() == 0 || !Util::fileExists(global.privateKey) ) {
+				SEISCOMP_ERROR("missing SSL private key");
+				return false;
+			}
+
+			_server.setCertificate(global.certificate);
+			_server.setPrivateKey(global.privateKey);
+		        _server.addEndpoint(Wired::Socket::IPAddress(), global.sslport, true,
+					    new SeedlinkListener(globalClientAllow, globalClientDeny,
+								 storage, formats, trusted, defaultAccess, access));
+		}
 	}
 	catch (const exception &e) {
 		SEISCOMP_ERROR(e.what());

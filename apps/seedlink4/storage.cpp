@@ -393,13 +393,13 @@ bool Cursor::match(RecordPtr rec) {
 		return false;
 
 	bool default_rule = true, result = false;
-	for ( auto i = _selectors.begin(); i != _selectors.end(); ++i ) {
-		if ( (*i)->negative() ) {
-			if ( (*i)->match(rec) ) return false;
+	for ( auto i : _selectors ) {
+		if ( i->negative() ) {
+			if ( i->match(rec) ) return false;
 		}
 		else {
 			default_rule = false;
-			result |= (*i)->match(rec);
+			result |= i->match(rec);
 		}
 	}
 
@@ -692,8 +692,8 @@ bool Ring::put(RecordPtr rec, Sequence seq, bool seq24bit) {
 
 	s->put(rec, seq);
 
-	for ( set<Cursor*>::iterator i = _cursors.begin(); i != _cursors.end(); ++i )
-		(*i)->dataAvail(seq);
+	for ( auto i : _cursors )
+		i->dataAvail(seq);
 
 	if ( _endseq < seq + 1 )
 		_endseq = seq + 1;
@@ -765,25 +765,6 @@ RingPtr Storage::ring(const string &name) {
 		return i->second;
 
 	return NULL;
-}
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
-
-
-
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Storage::checkRing(const string &name,
-			    int nsegments,
-			    int segsize,
-			    int blocksize) {
-	RingPtr ring = Storage::ring(name);
-
-	if ( ring )
-		return ring->check(nsegments, segsize, blocksize);
-	else
-		createRing(name, nsegments, segsize, blocksize);
-
-	return true;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

@@ -18,7 +18,8 @@ def copydata(ifd, ofd):
 
         ifd.read(6)  # throw away sequence number
         msrec = ifd.read(512)
-        ofd.write(b"SE2")  # signature and format code
+        ofd.write(b"SE2\0")  # signature, format code and reserved byte
+        ofd.write(struct.pack("<L", 520)) # length of following data
         ofd.write(struct.pack("<q", -1))  # undefined seq
         ofd.write(msrec)
         ofd.flush()

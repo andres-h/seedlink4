@@ -56,6 +56,7 @@ class Record : public Core::BaseObject {
 		Core::TimeSpan timeSpan() { return _timespan; }
 		FormatCode format() { return _format; }
 		const std::string &payload() { return _payload; }
+		size_t payloadLength() { return _payload.length(); }
 
 		void serializeHeader(Core::Archive &ar);
 		void serializePayload(Core::Archive &ar);

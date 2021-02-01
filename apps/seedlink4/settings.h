@@ -25,17 +25,23 @@ namespace Seedlink {
 
 // Define default configuration
 struct Settings : System::Application::AbstractSettings {
-	Settings(): port(18000), segments(10), segsize(1000), recsize(10240) {
+	Settings(): port(18000), sslport(0), segments(10), segsize(1000), recsize(10240) {
 		filebase = Environment::Instance()->installDir() + "/var/lib/seedlink4";
 		organization = "Unconfigured";
+		trusted = "127.0.0.1/8";
 	}
 
 	int port;
+	int sslport;
 	int segments;
 	int segsize;
 	int recsize;
+	std::string certificate;
+	std::string privateKey;
 	std::string filebase;
 	std::string organization;
+	std::string trusted;
+	std::string access;
 
 	virtual void accept(System::Application::SettingsLinker &linker) {
 		linker
@@ -43,6 +49,16 @@ struct Settings : System::Application::AbstractSettings {
 		& cli(port, "Server", "port",
 		      "TCP port to for data requests with SeedLink protocol",
 		      true)
+		& cfg(port, "sslport")
+		& cli(port, "Server", "sslport",
+		      "TCP port to for data requests with SeedLink protocol using SSL",
+		      true)
+		& cfg(certificate, "certificate")
+		& cli(certificate, "Server", "certificate",
+		      "Location of SSL certificate file")
+		& cfg(privateKey, "privateKey")
+		& cli(privateKey, "Server", "privateKey",
+		      "Location of SSL private key file")
 		& cfgAsPath(filebase, "filebase")
 		& cliAsPath(filebase, "Server", "filebase",
 			    "Location of storage",
@@ -59,7 +75,9 @@ struct Settings : System::Application::AbstractSettings {
 		& cli(recsize, "Server", "recsize",
 		      "Maximum record size, including metadata header",
 		      true)
-		& cfg(organization, "organization");
+		& cfg(organization, "organization")
+		& cfg(trusted, "trusted")
+		& cfg(access, "access");
 
 	}
 };

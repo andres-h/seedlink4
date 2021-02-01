@@ -25,6 +25,7 @@
 
 #include "storage.h"
 #include "format.h"
+#include "acl.h"
 
 
 namespace Seiscomp {
@@ -37,12 +38,18 @@ class SeedlinkListener : public Wired::AccessControlledEndpoint {
 		               const Wired::IPACL &deniedIPs,
 			       StoragePtr storage,
                                const std::map<FormatCode, FormatPtr> &formats,
+			       const ACL &trusted,
+			       const ACL &defaultAccess,
+			       const std::map<std::string, ACL> &access,
 		               Wired::Socket *socket = NULL);
 
 	private:
 		StoragePtr _storage;
 		std::map<std::string, std::string> _descriptions;
 		std::map<FormatCode, FormatPtr> _formats;
+		ACL _trusted;
+		ACL _defaultAccess;
+		std::map<std::string, ACL> _access;
 
 		Wired::Session *createSession(Wired::Socket *socket) override;
 };

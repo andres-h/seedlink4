@@ -32,12 +32,33 @@ namespace Applications {
 namespace Seedlink {
 
 
+#define TODO(cap) ""
+
+
+#define CAPABILITIES "SLPROTO:4.0 " \
+		     TODO("WEBSOCKET:13 ") \
+		     "CAP " \
+		     TODO("EXTREPLY ") \
+		     TODO("NSWILDCARD ") \
+		     TODO("BATCH ") \
+		     "ASYNC " \
+		     "AUTH:USERPASS " \
+		     TODO("AUTH:TOKEN ") \
+		     "MULTISTATION " \
+		     "TIME " \
+		     TODO("INFO ")
+
+
+
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 	public:
 		SeedlinkSession(Wired::Socket *sock,
 			       	StoragePtr storage,
 				const map<FormatCode, FormatPtr> &formats,
+				const ACL &trusted,
+				const ACL &defaultAccess,
+				const map<string, ACL> &access,
 				const map<string, string> &descriptions);
 
 		~SeedlinkSession();
@@ -51,11 +72,18 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 			Client
                 };
 
+		Wired::Socket::IPAddress _ipaddress;
+		string _user;
+		string _useragent;
 		SessionType _type;
 		StoragePtr _storage;
 		const map<FormatCode, FormatPtr> &_formats;
+		const ACL &_trusted;
+		const ACL &_defaultAccess;
+		const map<string, ACL> &_access;
 		const map<string, string> &_descriptions;
 		list<FormatCode> _accept;
+		bool _acceptAll;
 		map<string, CursorPtr> _stations;
 		set<CursorPtr> _cursorsAvail;
 		set<CursorPtr>::iterator _cursorIter;
@@ -63,6 +91,10 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		string _buffer;
 		bool _wildcard;
 		bool _transfer;
+
+		bool checkAccess(const string &station,
+				 const Wired::Socket::IPAddress &ip,
+				 const string &user);
 
 		void handleReceive(const char *data, size_t len) override;
 		void handleInbox(const char *data, size_t len) override;
@@ -87,9 +119,13 @@ SeedlinkListener::SeedlinkListener(const Wired::IPACL &allowedIPs,
                                  const Wired::IPACL &deniedIPs,
 				 StoragePtr storage,
 				 const map<FormatCode, FormatPtr> &formats,
+				 const ACL &trusted,
+				 const ACL &defaultAccess,
+				 const map<string, ACL> &access,
                                  Wired::Socket *socket)
 : Wired::AccessControlledEndpoint(socket, allowedIPs, deniedIPs)
-, _storage(storage), _formats(formats) {
+, _storage(storage), _formats(formats), _trusted(trusted)
+, _defaultAccess(defaultAccess), _access(access) {
 	DataModel::Inventory* inv = Client::Inventory::Instance()->inventory();
 	for ( unsigned int i = 0; i < inv->networkCount(); ++i ) {
 		DataModel::Network* net = inv->network(i);
@@ -109,7 +145,8 @@ SeedlinkListener::SeedlinkListener(const Wired::IPACL &allowedIPs,
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 	socket->setMode(Wired::Socket::Read);
-	return new SeedlinkSession(socket, _storage, _formats, _descriptions);
+	return new SeedlinkSession(socket, _storage, _formats, _trusted,
+				   _defaultAccess, _access, _descriptions);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -121,10 +158,16 @@ Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 				 StoragePtr storage,
 				 const map<FormatCode, FormatPtr> &formats,
+				 const ACL &trusted,
+				 const ACL &defaultAccess,
+				 const map<string, ACL> &access,
 				 const map<string, string> &descriptions)
 : Wired::ClientSession(sock, 200)
-, _type(Unspecific), _storage(storage), _formats(formats), _descriptions(descriptions)
-, _wildcard(false), _transfer(false) {}
+, _type(Unspecific), _storage(storage), _formats(formats), _trusted(trusted)
+, _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions)
+, _wildcard(false), _transfer(false) {
+	_ipaddress = sock->address();
+}
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
@@ -132,6 +175,28 @@ SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 SeedlinkSession::~SeedlinkSession() {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool SeedlinkSession::checkAccess(const string &station,
+				  const Wired::Socket::IPAddress &ip,
+				  const string &user) {
+	if ( _trusted.check(ip, user) )
+		return true;
+
+	map<string, ACL>::const_iterator i;
+	if ( (i = _access.find(station)) != _access.end() &&
+	     !i->second.check(_ipaddress, _user) )
+		return true;
+
+	if ( _defaultAccess.check(_ipaddress, _user) )
+		return true;
+
+	return false;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -189,30 +254,50 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	}
 
 	if ( tokLen == 5 && strncasecmp(tok, "HELLO", tokLen) == 0 ) {
-		sendResponse("SeedLink4 v" SEEDLINK4_VERSION_NAME " :: SLPROTO:4.0 ASYNC MULTISTATION TIME\r\n");
+		sendResponse("SeedLink4 v4 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0 CAP GETCAP\r\n");
 		sendResponse(global.organization.c_str(), static_cast<int>(global.organization.size()));
 		sendResponse("\r\n");
 		return;
 	}
 
-	if ( tokLen == 3 && strncasecmp(tok, "CAT", tokLen) == 0 ) {
-		for ( const auto &name : _storage->cat() ) {
-			size_t sep = name.find_first_of('.');
-			if ( sep != string::npos ) {
-				string net = name.substr(0, sep);
-				string sta = name.substr(sep + 1);
-				auto descIt = _descriptions.find(name);
-				string desc = (descIt != _descriptions.end())? descIt->second: sta;
-				sendResponse((net + " " + sta + " " + desc + "\r\n").c_str());
-			}
+	if ( tokLen == 9 && strncasecmp(tok, "USERAGENT", tokLen) == 0 ) {
+		_useragent = string(data, len);
+		sendResponse("OK\r\n");
+		return;
+	}
+
+	if ( tokLen == 4 && strncasecmp(tok, "AUTH", tokLen) == 0 ) {
+		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
+			sendResponse("ERROR\r\n");
+			return;
 		}
 
-		sendResponse("END");
+		if ( tokLen == 8 && strncasecmp(tok, "USERPASS", tokLen) == 0 ) {
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
+				sendResponse("ERROR\r\n");
+				return;
+			}
+
+			_user = string(tok, tokLen);
+
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
+				sendResponse("ERROR\r\n");
+				return;
+			}
+
+			string password(tok, tokLen);
+			// TODO: check password
+
+			sendResponse("OK\r\n");
+			return;
+		}
+
+		sendResponse("ERROR\r\n");
 		return;
 	}
 
 	if ( tokLen == 4 && strncasecmp(tok, "FEED", tokLen) == 0 ) {
-		if ( _type == Unspecific ) {
+		if ( _trusted.check(_ipaddress, _user) && _type == Unspecific ) {
 			sendResponse("OK\r\n");
 			_type = Feed;
 		}
@@ -227,15 +312,40 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		_type = Client;
 
 		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			FormatCode val;
-			if ( !Core::fromString(val, string(tok, tokLen)) ) {
-				sendResponse("ERROR\r\n");
-				return;
+			if (strncasecmp(tok, "*", tokLen) == 0 ) {
+				_acceptAll = true;
 			}
+			else {
+				FormatCode val;
+				if ( !Core::fromString(val, string(tok, tokLen)) ) {
+					sendResponse("ERROR\r\n");
+					return;
+				}
 
-			_accept.push_back(val);
+				_accept.push_back(val);
+			}
 		}
 		sendResponse("OK\r\n");
+		return;
+	}
+
+	if ( tokLen == 6 && strncasecmp(tok, "ENABLE", tokLen) == 0 ) {
+		// TODO
+		sendResponse("ERROR\r\n");
+		return;
+	}
+
+	if ( tokLen == 12 && strncasecmp(tok, "CAPABILITIES", tokLen) == 0 ) {
+		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+			// TODO
+		}
+
+		sendResponse("OK\r\n");
+		return;
+	}
+
+	if ( tokLen == 15 && strncasecmp(tok, "GETCAPABILITIES", tokLen) == 0 ) {
+		sendResponse(CAPABILITIES "\r\n");
 		return;
 	}
 
@@ -253,6 +363,15 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			name = string(tok, tokLen) + "." + name;
 		else
 			name = string(/* TODO: default net */) + "." + name;
+
+		if ( !checkAccess(name, _ipaddress, _user) ) {
+			SEISCOMP_INFO("access to %s denied for %s (%s)",
+				      name.c_str(),
+				      Wired::toString(_ipaddress).c_str(),
+				      _user.c_str());
+			sendResponse("ERROR\r\n");
+			return;
+		}
 
 		// TODO: wildcards
 		_wildcard = false;
@@ -324,6 +443,25 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		}
 
 		startTransfer();
+		return;
+	}
+
+	if ( tokLen == 3 && strncasecmp(tok, "CAT", tokLen) == 0 ) {
+		for ( const auto &name : _storage->cat() ) {
+			if ( !checkAccess(name, _ipaddress, _user) )
+				continue;
+
+			size_t sep = name.find_first_of('.');
+			if ( sep != string::npos ) {
+				string net = name.substr(0, sep);
+				string sta = name.substr(sep + 1);
+				auto descIt = _descriptions.find(name);
+				string desc = (descIt != _descriptions.end())? descIt->second: sta;
+				sendResponse((net + " " + sta + " " + desc + "\r\n").c_str());
+			}
+		}
+
+		sendResponse("END");
 		return;
 	}
 
@@ -470,17 +608,20 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 	}
 
 	while (1) {
-		if ( len < 12 )
+		if ( len < 16 )
 			break;
 
 		FormatCode formatCode;
+		uint32_t packetLength;
+		uint32_t headerLength;
 		Sequence seq;
-		size_t headerLen;
 		bool seq24bit;
 
 		if ( data[0] == 'S' && data[1] == 'L' ) {  // legacy format
 			formatCode = FMT_MSEED24;
-			headerLen = 8;
+			packetLength = 520;
+			headerLength = 8;
+			seq = UNSET;
 			seq24bit = true;
 
 			try {
@@ -501,8 +642,9 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		}
 		else if ( data[0] == 'S' && data[1] == 'E' ) {
 			formatCode = (FormatCode)data[2];
-			seq = *(Sequence *)(data + 3);  // TODO: byteorder
-			headerLen = 11;
+			packetLength = *(uint32_t *)(data + 4) + 8; // TODO: byteorder
+			headerLength = 16;
+			seq = *(Sequence *)(data + 8);              // TODO: byteorder
 			seq24bit = false;
 		}
 		else {
@@ -510,6 +652,9 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			close();
 			return;
 		}
+
+		if ( len < packetLength )  // not enough data
+			break;
 
 		map<FormatCode, FormatPtr>::const_iterator it = _formats.find(formatCode);
 		if ( it == _formats.end() ) {
@@ -519,19 +664,12 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		}
 
 		RecordPtr rec;
-		ssize_t recLen = it->second->readRecord(data + headerLen, len - headerLen, rec);
-
-		if ( recLen < 0 ) {
+		if ( it->second->readRecord(data + headerLength, packetLength - headerLength, rec) <= 0 ) {
 			SEISCOMP_ERROR("invalid data");
-			close();
-			return;
+			data += packetLength;
+			len -= packetLength;
+			continue;
 		}
-
-		if ( recLen == 0 )  // not enough data
-			break;
-
-		data += recLen + headerLen;
-		len -= recLen + headerLen;
 
 		string ringName = rec->networkCode() + "." + rec->stationCode();
 
@@ -562,6 +700,9 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 					 rec->channelCode().c_str(),
 					 seq24bit? 6: 16,
 					 (unsigned long long)seq);
+
+		data += packetLength;
+		len -= packetLength;
 	}
 
 	_buffer = string(data, len);
@@ -595,7 +736,7 @@ void SeedlinkSession::startTransfer() {
 	for ( i = _stations.begin(); i != _stations.end(); ++i ) {
 		i->second->accept(0);  // reset accept list
 
-		if ( _accept.empty() ) {
+		if ( _accept.empty() && !_acceptAll ) {
 			i->second->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
 		}
 		else {
@@ -638,7 +779,7 @@ void SeedlinkSession::collectData() {
 			RecordPtr rec = (*_cursorIter)->next();
 
 			if ( rec ) {
-				if ( _accept.empty() ) {  // legacy mode
+				if ( _accept.empty() && !_acceptAll ) {  // legacy mode
 					if ( rec->format() != FMT_MSEED24 )
 						throw logic_error("unexpected format");
 
@@ -650,9 +791,12 @@ void SeedlinkSession::collectData() {
 				}
 				else {
 					Sequence seq = (*_cursorIter)->sequence() - 1;
+					uint32_t length = rec->payloadLength() + 8;
 					buffer.append("SE");
 					buffer.push_back(char(rec->format()));
-					buffer.append((char *)&seq, 8);  // TODO: byteorder
+					buffer.push_back(char(0));
+					buffer.append((char *)&length, 4); // TODO: byteorder
+					buffer.append((char *)&seq, 8);    // TODO: byteorder
 					buffer.append(rec->payload());
 				}
 			}

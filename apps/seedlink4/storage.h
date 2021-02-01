@@ -177,11 +177,6 @@ class Storage : public Core::BaseObject {
 
 		RingPtr ring(const std::string &name);
 
-		bool checkRing(const std::string &name,
-			     int nsegments,
-			     int segsize,
-			     int recsize);
-
 		std::vector<std::string> cat();
 
 	private:

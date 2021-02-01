@@ -5,6 +5,7 @@ SET(
 	${PACKAGE_NAME}_SOURCES
 		main.cpp
 		app.cpp
+		acl.cpp
 		format.cpp
 		mseed24.cpp
 		record.cpp

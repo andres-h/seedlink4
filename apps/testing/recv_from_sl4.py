@@ -10,13 +10,13 @@ def expect(fd, s):
 
 def copydata(ifd, ofd):
     while True:
-        data = ifd.read(523)  # assume 512b mseed and 11b header
+        data = ifd.read(528)  # assume 512b mseed and 16b header
 
         if data[:2] != b"SE":
             print("invalid signature")
             break
 
-        ofd.write(data[11:])
+        ofd.write(data[16:])
         ofd.flush()
 
 def main():
