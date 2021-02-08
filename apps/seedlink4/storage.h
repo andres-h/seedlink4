@@ -22,6 +22,7 @@
 #include <seiscomp/core/baseobject.h>
 #include <seiscomp/core/datetime.h>
 
+#include "selector.h"
 #include "record.h"
 
 
@@ -63,23 +64,6 @@ class Segment : public Core::BaseObject {
 };
 
 
-DEFINE_SMARTPOINTER(Selector);
-class Selector : public Core::BaseObject {
-	public:
-		bool init(const std::string &selstr);
-		bool match(RecordPtr rec);
-		bool negative() { return _neg; }
-
-	private:
-		bool _neg;
-		std::regex _rloc;
-		std::regex _rcha;
-		std::regex _rtype;
-
-		bool initPattern(std::regex &r, const std::string &s, bool simple = false);
-};
-
-
 class CursorOwner;
 class CursorClient;
 
@@ -101,7 +85,7 @@ class Cursor : public Core::BaseObject {
 		void setDialup(bool dialup);
 		void setStart(Core::Time t);
 		void setEnd(Core::Time t);
-		bool select(const std::string &sel);
+		void select(SelectorPtr sel);
 		void accept(FormatCode format);
 		RecordPtr next();
 		Sequence sequence();

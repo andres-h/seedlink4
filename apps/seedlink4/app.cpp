@@ -64,8 +64,6 @@ bool Application::init() {
 
 	_server.setTriggerMode(Wired::DeviceGroup::LevelTriggered);
 
-	Wired::IPACL globalClientAllow, globalClientDeny;
-
 	try {
 		StoragePtr storage = new Storage(global.filebase);
 
@@ -123,9 +121,25 @@ bool Application::init() {
 				access.insert(pair<string, ACL>(i.networkCode() + "." + i.stationCode(), accessStr));
 		}
 
-		_server.addEndpoint(Wired::Socket::IPAddress(), global.port, false,
-				    new SeedlinkListener(globalClientAllow, globalClientDeny,
-							 storage, formats, trusted, defaultAccess, access));
+		map<string, string> descriptions;
+		DataModel::Inventory* inv = Client::Inventory::Instance()->inventory();
+		for ( unsigned int i = 0; i < inv->networkCount(); ++i ) {
+			DataModel::Network* net = inv->network(i);
+			for ( unsigned int j = 0; j < net->stationCount(); ++j ) {
+				DataModel::Station* sta = net->station(j);
+				descriptions.insert(pair<string, string>(net->code() + "." + sta->code(),
+									 sta->description()));
+			}
+		}
+
+		SeedlinkListener* listener = new SeedlinkListener(storage,
+								  formats,
+								  trusted,
+								  defaultAccess,
+								  access,
+								  descriptions);
+
+		_server.addEndpoint(Wired::Socket::IPAddress(), global.port, false, listener);
 
 		if ( global.sslport > 0 ) {
 			if ( global.certificate.length() == 0 || !Util::fileExists(global.certificate) ) {
@@ -140,9 +154,7 @@ bool Application::init() {
 
 			_server.setCertificate(global.certificate);
 			_server.setPrivateKey(global.privateKey);
-		        _server.addEndpoint(Wired::Socket::IPAddress(), global.sslport, true,
-					    new SeedlinkListener(globalClientAllow, globalClientDeny,
-								 storage, formats, trusted, defaultAccess, access));
+		        _server.addEndpoint(Wired::Socket::IPAddress(), global.sslport, true, listener);
 		}
 	}
 	catch (const exception &e) {

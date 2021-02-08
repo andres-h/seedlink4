@@ -10,47 +10,36 @@
  * https://www.gnu.org/licenses/agpl-3.0.html.                             *
  ***************************************************************************/
 
-#ifndef SEISCOMP_APPS_SEEDLINK_SESSION_H__
-#define SEISCOMP_APPS_SEEDLINK_SESSION_H__
+#ifndef SEISCOMP_APPS_SEEDLINK_SELECTOR_H__
+#define SEISCOMP_APPS_SEEDLINK_SELECTOR_H__
 
-#include <seiscomp/wired/clientsession.h>
-#include <seiscomp/wired/endpoint.h>
-#include <seiscomp/wired/ipacl.h>
+#include <string>
+#include <regex>
 
-#include <map>
-#include <list>
-#include <vector>
-#include <set>
-#include <cstdint>
+#include <seiscomp/core/baseobject.h>
 
-#include "storage.h"
-#include "format.h"
-#include "acl.h"
+#include "record.h"
 
 
 namespace Seiscomp {
 namespace Applications {
 namespace Seedlink {
 
-class SeedlinkListener : public Wired::Endpoint {
+
+DEFINE_SMARTPOINTER(Selector);
+class Selector : public Core::BaseObject {
 	public:
-		SeedlinkListener(StoragePtr storage,
-				 const std::map<FormatCode, FormatPtr> &formats,
-				 const ACL &trusted,
-				 const ACL &defaultAccess,
-				 const std::map<std::string, ACL> &access,
-				 const std::map<std::string, std::string> &descriptions,
-				 Wired::Socket *socket = NULL);
+		bool init(const std::string &selstr);
+		bool match(RecordPtr rec);
+		bool negative() { return _neg; }
 
 	private:
-		StoragePtr _storage;
-		std::map<FormatCode, FormatPtr> _formats;
-		ACL _trusted;
-		ACL _defaultAccess;
-		std::map<std::string, ACL> _access;
-		std::map<std::string, std::string> _descriptions;
+		bool _neg;
+		std::regex _rloc;
+		std::regex _rcha;
+		std::regex _rtype;
 
-		Wired::Session *createSession(Wired::Socket *socket) override;
+		bool initPattern(std::regex &r, const std::string &s, bool simple = false);
 };
 
 }

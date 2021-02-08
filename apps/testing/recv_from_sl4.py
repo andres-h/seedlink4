@@ -29,7 +29,7 @@ def main():
     ifd.write(b"ACCEPT 50 51\r\n")
     ifd.flush()
     expect(ifd, b"OK")
-    ifd.write(b"STATION WLF GE\r\n")
+    ifd.write(b"STATION * GE\r\n")
     ifd.flush()
     expect(ifd, b"OK")
     ifd.write(b"DATA\r\n")

@@ -4,11 +4,12 @@ SET(APP_NAME seedlink4)
 SET(
 	${PACKAGE_NAME}_SOURCES
 		main.cpp
-		app.cpp
 		acl.cpp
+		app.cpp
 		format.cpp
 		mseed24.cpp
 		record.cpp
+		selector.cpp
 		server.cpp
 		session.cpp
 		settings.cpp

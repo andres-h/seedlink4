@@ -29,6 +29,8 @@ struct Settings : System::Application::AbstractSettings {
 		filebase = Environment::Instance()->installDir() + "/var/lib/seedlink4";
 		organization = "Unconfigured";
 		trusted = "127.0.0.1/8";
+		defaultNetwork = "XX";
+		defaultStation = "XXX";
 	}
 
 	int port;
@@ -42,6 +44,8 @@ struct Settings : System::Application::AbstractSettings {
 	std::string organization;
 	std::string trusted;
 	std::string access;
+	std::string defaultNetwork;
+	std::string defaultStation;
 
 	virtual void accept(System::Application::SettingsLinker &linker) {
 		linker
@@ -77,8 +81,9 @@ struct Settings : System::Application::AbstractSettings {
 		      true)
 		& cfg(organization, "organization")
 		& cfg(trusted, "trusted")
-		& cfg(access, "access");
-
+		& cfg(access, "access")
+		& cfg(access, "defaultNetwork")
+		& cfg(access, "defaultStation");
 	}
 };
 

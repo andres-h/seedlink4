@@ -17,6 +17,7 @@
 #include <seiscomp/logging/log.h>
 #include <seiscomp/core/strings.h>
 #include <seiscomp/client/inventory.h>
+#include <seiscomp/wired/reactor.h>
 
 #include "session.h"
 #include "settings.h"
@@ -39,14 +40,136 @@ namespace Seedlink {
 		     TODO("WEBSOCKET:13 ") \
 		     "CAP " \
 		     TODO("EXTREPLY ") \
-		     TODO("NSWILDCARD ") \
-		     TODO("BATCH ") \
+		     "NSWILDCARD " \
+		     "BATCH " \
 		     "ASYNC " \
 		     "AUTH:USERPASS " \
 		     TODO("AUTH:TOKEN ") \
 		     "MULTISTATION " \
 		     "TIME " \
 		     TODO("INFO ")
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+DEFINE_SMARTPOINTER(Station);
+class Station : public Core::BaseObject {
+	public:
+		void setPattern(const string &p);
+		bool match(const string &s);
+		void setSequence(Sequence seq, bool seq24bit = false);
+		void setDialup(bool dialup);
+		void setStart(Core::Time t);
+		void setEnd(Core::Time t);
+		bool select(const string &selstr);
+		CursorPtr cursor(RingPtr ring, CursorClient &client);
+
+	private:
+		regex _regex;
+		Sequence _seq;
+		bool _seq24bit;
+		bool _dialup;
+		Core::Time _starttime;
+		Core::Time _endtime;
+		std::list<SelectorPtr> _selectors;
+};
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Station::setPattern(const string &p) {
+	string r = regex_replace(p, regex("\\."), "\\.");
+	r = regex_replace(r, regex("\\?"), ".");
+	r = regex_replace(r, regex("\\*"), ".*");
+	_regex = regex(r);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Station::match(const string &s) {
+	return regex_match(s, _regex);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Station::setSequence(Sequence seq, bool seq24bit) {
+	_seq = seq;
+	_seq24bit = seq24bit;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Station::setDialup(bool dialup) {
+	_dialup = dialup;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Station::setStart(Core::Time t) {
+	_starttime = t;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Station::setEnd(Core::Time t) {
+	_endtime = t;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+bool Station::select(const string &selstr) {
+	if ( selstr.length() == 0 ) {
+		_selectors.clear();
+		return true;
+	}
+
+	SelectorPtr sel = new Selector();
+	if ( !sel->init(selstr) )
+		return false;
+
+	_selectors.push_back(sel);
+	return true;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+CursorPtr Station::cursor(RingPtr ring, CursorClient &client) {
+	CursorPtr cursor = ring->cursor(client);
+	cursor->setSequence(_seq, _seq24bit);
+	cursor->setStart(_starttime);
+	cursor->setEnd(_endtime);
+	cursor->setDialup(_dialup);
+
+	for ( auto i : _selectors )
+		cursor->select(i);
+
+	return cursor;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 
 
 
@@ -63,6 +186,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 
 		~SeedlinkSession();
 
+		void stationAvail(const string &name);
 
 
 	private:
@@ -84,13 +208,16 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		const map<string, string> &_descriptions;
 		list<FormatCode> _accept;
 		bool _acceptAll;
-		map<string, CursorPtr> _stations;
+		map<string, StationPtr> _stations;
+		map<string, StationPtr> _wildcardStations;
+		StationPtr _currentStation;
+		map<string, CursorPtr> _cursors;
 		set<CursorPtr> _cursorsAvail;
 		set<CursorPtr>::iterator _cursorIter;
-		CursorPtr _cursor;
 		string _buffer;
 		bool _wildcard;
 		bool _transfer;
+		bool _batch;
 
 		bool checkAccess(const string &station,
 				 const Wired::Socket::IPAddress &ip,
@@ -109,33 +236,22 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		void outboxFlushed() override;
 		void cursorAvail(CursorPtr c, Sequence seq);
 };
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-SeedlinkListener::SeedlinkListener(const Wired::IPACL &allowedIPs,
-                                 const Wired::IPACL &deniedIPs,
-				 StoragePtr storage,
-				 const map<FormatCode, FormatPtr> &formats,
-				 const ACL &trusted,
-				 const ACL &defaultAccess,
-				 const map<string, ACL> &access,
-                                 Wired::Socket *socket)
-: Wired::AccessControlledEndpoint(socket, allowedIPs, deniedIPs)
+SeedlinkListener::SeedlinkListener(StoragePtr storage,
+				   const map<FormatCode, FormatPtr> &formats,
+				   const ACL &trusted,
+				   const ACL &defaultAccess,
+				   const map<string, ACL> &access,
+				   const map<string, string> &descriptions,
+                                   Wired::Socket *socket)
+: Wired::Endpoint(socket)
 , _storage(storage), _formats(formats), _trusted(trusted)
-, _defaultAccess(defaultAccess), _access(access) {
-	DataModel::Inventory* inv = Client::Inventory::Instance()->inventory();
-	for ( unsigned int i = 0; i < inv->networkCount(); ++i ) {
-		DataModel::Network* net = inv->network(i);
-		for ( unsigned int j = 0; j < net->stationCount(); ++j ) {
-			DataModel::Station* sta = net->station(j);
-			_descriptions.insert(pair<string, string>(
-						net->code() + "." + sta->code(),
-						sta->description()));
-		}
-	}
+, _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -165,8 +281,9 @@ SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 : Wired::ClientSession(sock, 200)
 , _type(Unspecific), _storage(storage), _formats(formats), _trusted(trusted)
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions)
-, _wildcard(false), _transfer(false) {
+, _wildcard(false), _transfer(false), _batch(false) {
 	_ipaddress = sock->address();
+	_currentStation = new Station();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -190,10 +307,10 @@ bool SeedlinkSession::checkAccess(const string &station,
 
 	map<string, ACL>::const_iterator i;
 	if ( (i = _access.find(station)) != _access.end() &&
-	     !i->second.check(_ipaddress, _user) )
+	     !i->second.check(ip, user) )
 		return true;
 
-	if ( _defaultAccess.check(_ipaddress, _user) )
+	if ( _defaultAccess.check(ip, user) )
 		return true;
 
 	return false;
@@ -260,6 +377,12 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		return;
 	}
 
+	if ( tokLen == 5 && strncasecmp(tok, "BATCH", tokLen) == 0 ) {
+		_batch = true;
+		sendResponse("OK\r\n");
+		return;
+	}
+
 	if ( tokLen == 9 && strncasecmp(tok, "USERAGENT", tokLen) == 0 ) {
 		_useragent = string(data, len);
 		sendResponse("OK\r\n");
@@ -297,14 +420,22 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	}
 
 	if ( tokLen == 4 && strncasecmp(tok, "FEED", tokLen) == 0 ) {
-		if ( _trusted.check(_ipaddress, _user) && _type == Unspecific ) {
-			sendResponse("OK\r\n");
-			_type = Feed;
-		}
-		else {
+		if ( _type != Unspecific ) {
 			sendResponse("ERROR\r\n");
+			return;
 		}
 
+		if ( !_trusted.check(_ipaddress, _user) ) {
+			SEISCOMP_DEBUG("FEED access denied for %s (%s)",
+				       Wired::toString(_ipaddress).c_str(),
+				       _user.c_str());
+
+			sendResponse("ERROR\r\n");
+			return;
+		}
+
+		_type = Feed;
+		sendResponse("OK\r\n");
 		return;
 	}
 
@@ -340,7 +471,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			// TODO
 		}
 
-		sendResponse("OK\r\n");
+		if ( !_batch ) sendResponse("OK\r\n");
 		return;
 	}
 
@@ -353,7 +484,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		_type = Client;
 
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
-			sendResponse("ERROR\r\n");
+			if ( !_batch ) sendResponse("ERROR\r\n");
 			return;
 		}
 
@@ -362,57 +493,45 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL )
 			name = string(tok, tokLen) + "." + name;
 		else
-			name = string(/* TODO: default net */) + "." + name;
+			name = string(global.defaultNetwork + "." + name);
 
-		if ( !checkAccess(name, _ipaddress, _user) ) {
-			SEISCOMP_INFO("access to %s denied for %s (%s)",
-				      name.c_str(),
-				      Wired::toString(_ipaddress).c_str(),
-				      _user.c_str());
-			sendResponse("ERROR\r\n");
+		if ( !regex_match(name, regex("[A-Z0-9\\?\\*]*\\.[A-Z0-9\\?\\*]*")) ) {
+			if ( !_batch ) sendResponse("ERROR\r\n");
 			return;
 		}
 
-		// TODO: wildcards
-		_wildcard = false;
+		StationPtr sta = new Station();
 
-		CursorPtr cursor;
-		map<string, CursorPtr>::iterator i;
-		if ( (i = _stations.find(name)) == _stations.end() ) {
-			RingPtr ring = _storage->ring(name);
-			if ( !ring ) {
-				sendResponse("ERROR\r\n");
-				return;
-			}
-
-			i = _stations.insert(pair<string,CursorPtr>(name, ring->cursor(*this))).first;
+		if ( name.find('?') != string::npos || name.find('*') != string::npos ) {
+			// TODO: limit number of wildcard stations
+			sta->setPattern(name);
+			_currentStation = _wildcardStations.insert(pair<string, StationPtr>(name, sta)).first->second;
+			_wildcard = true;
+		}
+		else {
+			// TODO: limit number of future stations
+			_currentStation = _stations.insert(pair<string, StationPtr>(name, sta)).first->second;
+			_wildcard = false;
 		}
 
-		_cursor = i->second;
-		sendResponse("OK\r\n");
+		if ( !_batch ) sendResponse("OK\r\n");
 		return;
 	}
 
 	if ( tokLen == 6 && strncasecmp(tok, "SELECT", tokLen) == 0 ) {
 		_type = Client;
 
-		if ( !_cursor) {
-			// TODO: uni-station
-			sendResponse("ERROR\r\n");
-			return;
-		}
-
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if ( !_cursor->select(string(tok, tokLen)) ) {
-				sendResponse("ERROR\r\n");
+			if ( !_currentStation->select(string(tok, tokLen)) ) {
+				if ( !_batch ) sendResponse("ERROR\r\n");
 				return;
 			}
 		}
 		else {
-			_cursor->select("");
+			_currentStation->select("");
 		}
 
-		sendResponse("OK\r\n");
+		if ( !_batch ) sendResponse("OK\r\n");
 		return;
 	}
 
@@ -437,7 +556,8 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	if ( tokLen == 3 && strncasecmp(tok, "END", tokLen) == 0 ) {
 		_type = Client;
 
-		if ( !_cursor) {
+		if ( _stations.empty() && _wildcardStations.empty() ) {
+			// uni-station mode
 			sendResponse("ERROR\r\n");
 			return;
 		}
@@ -469,6 +589,8 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		close();
 		return;
 	}
+
+	sendResponse("ERROR\r\n");
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -477,30 +599,31 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
-	if ( !_cursor) {
-		// TODO: uni-station
-		sendResponse("ERROR\r\n");
-		return;
-	}
-
-	_cursor->setSequence(UNSET);
-	_cursor->setStart(Core::Time::Null);
-	_cursor->setEnd(Core::Time::Null);
-	_cursor->setDialup(dft == 2);
+	_currentStation->setSequence(UNSET);
+	_currentStation->setStart(Core::Time::Null);
+	_currentStation->setEnd(Core::Time::Null);
+	_currentStation->setDialup(dft == 2);
 
 	const char *tok;
 	size_t tokLen;
 
 	if ( dft == 1 || dft == 2 ) {  // "DATA" || "FETCH"
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
-			sendResponse("OK\r\n");
+			if ( _stations.empty() && _wildcardStations.empty() ) {
+				// uni-station mode
+				startTransfer();
+			}
+			else if ( !_batch ) {
+				sendResponse("OK\r\n");
+			}
+
 	 		return;
 		}
 
 		if ( tokLen != 2 || strncasecmp(tok, "-1", tokLen) != 0 ) {
 			if ( _wildcard ) {
 				// cannot use sequence number with wildcard
-				sendResponse("ERROR\r\n");
+				if ( !_batch ) sendResponse("ERROR\r\n");
 				return;
 			}
 
@@ -510,55 +633,75 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 
 				if ( end == tokLen && seq < UNSET) {
 					bool seq24bit = (tokLen <= 6);
-					_cursor->setSequence(seq, seq24bit);
+					_currentStation->setSequence(seq, seq24bit);
 				}
 				else {
-					sendResponse("ERROR\r\n");
+					if ( !_batch ) sendResponse("ERROR\r\n");
 					return;
 				}
 			}
 			catch(const invalid_argument&) {
-				sendResponse("ERROR\r\n");
+				if ( !_batch ) sendResponse("ERROR\r\n");
 				return;
 			}
 		}
 
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
-			sendResponse("OK\r\n");
+			if ( _stations.empty() && _wildcardStations.empty() ) {
+				// uni-station mode
+				startTransfer();
+			}
+			else if ( !_batch ) {
+				sendResponse("OK\r\n");
+			}
+
 			return;
 		}
 	}
 	else {
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
-			sendResponse("ERROR\r\n");
+			if ( !_batch ) sendResponse("ERROR\r\n");
 			return;
 		}
 
-		_cursor->setSequence(0);
+		_currentStation->setSequence(0);
 	}
 
 	Core::Time starttime = parseTime(tok, tokLen);
 	if ( !starttime.valid() ) {
-		sendResponse("ERROR\r\n");
+		if ( !_batch ) sendResponse("ERROR\r\n");
 		return;
 	}
 
-	_cursor->setStart(starttime);
+	_currentStation->setStart(starttime);
 
 	if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
-		sendResponse("OK\r\n");
+		if ( _stations.empty() && _wildcardStations.empty() ) {
+			// uni-station mode
+			startTransfer();
+		}
+		else if ( !_batch ) {
+			sendResponse("OK\r\n");
+		}
+
 		return;
 	}
 
 	Core::Time endtime = parseTime(tok, tokLen);
 	if ( !endtime.valid() ) {
-		sendResponse("ERROR\r\n");
+		if ( !_batch ) sendResponse("ERROR\r\n");
 		return;
 	}
 
-	_cursor->setEnd(endtime);
+	_currentStation->setEnd(endtime);
 
-	sendResponse("OK\r\n");
+	if ( _stations.empty() && _wildcardStations.empty() ) {
+		// uni-station mode
+		startTransfer();
+	}
+	else if ( !_batch ) {
+		sendResponse("OK\r\n");
+	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -689,7 +832,12 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 				return;
 			}
 
-			// TODO: check if the new station matches any standing wildcard requests
+			for ( auto i : parent()->sessions() ) {
+				SeedlinkSession* s = dynamic_cast<SeedlinkSession*>(i.get());
+
+				if ( s )
+					s->stationAvail(ringName);
+			}
 		}
 
 		if ( !ring->put(rec, seq, seq24bit) )
@@ -732,27 +880,94 @@ void SeedlinkSession::sendResponse(const char *data, int len) {
 
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 void SeedlinkSession::startTransfer() {
-	map<string, CursorPtr>::iterator i;
-	for ( i = _stations.begin(); i != _stations.end(); ++i ) {
-		i->second->accept(0);  // reset accept list
+	_cursorsAvail.clear();
 
-		if ( _accept.empty() && !_acceptAll ) {
-			i->second->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
-		}
-		else {
-			list<FormatCode>::iterator j;
-			for ( j = _accept.begin(); j != _accept.end(); ++j ) {
-				i->second->accept(*j);
+	if ( _stations.empty() && _wildcardStations.empty() ) {
+		// uni-station mode
+		string name = global.defaultNetwork + "." + global.defaultStation;
+
+		RingPtr ring = _storage->ring(name);
+
+		if ( !ring ) {
+			ring = _storage->createRing(name,
+						    global.segments,
+						    global.segsize,
+						    global.recsize);
+
+			if ( !ring ) {
+				SEISCOMP_ERROR("could not create ring");
+				close();
+				return;
 			}
 		}
 
-		_cursorsAvail.insert(i->second);
+		CursorPtr cursor = _currentStation->cursor(ring, *this);
+		_cursors.insert(pair<string, CursorPtr>(name, cursor));
+		_cursorsAvail.insert(cursor);
+	}
+	else {
+		for ( auto i : _stations ) {
+			if ( !checkAccess(i.first, _ipaddress, _user) ) {
+				SEISCOMP_INFO("access to %s denied for %s (%s)",
+					      i.first.c_str(),
+					      Wired::toString(_ipaddress).c_str(),
+					      _user.c_str());
+
+				continue;
+			}
+
+			RingPtr ring = _storage->ring(i.first);
+
+			if ( !ring ) continue;  // future station
+
+			CursorPtr cursor = i.second->cursor(ring, *this);
+			_cursors.insert(pair<string, CursorPtr>(i.first, cursor));
+			_cursorsAvail.insert(cursor);
+		}
+
+		for ( auto i : _wildcardStations ) {
+			for ( const auto &name : _storage->cat() ) {
+				if ( _stations.find(name) != _stations.end() )
+					continue;
+
+				if ( !i.second->match(name) )
+					continue;
+
+				if ( !checkAccess(name, _ipaddress, _user) ) {
+					SEISCOMP_DEBUG("access to %s denied for %s (%s)",
+						       name.c_str(),
+						       Wired::toString(_ipaddress).c_str(),
+						       _user.c_str());
+
+					continue;
+				}
+
+				RingPtr ring = _storage->ring(name);
+
+				if ( !ring )
+					throw logic_error("station " + name + " not found");
+
+				CursorPtr cursor = i.second->cursor(ring, *this);
+				_cursors.insert(pair<string, CursorPtr>(name, cursor));
+				_cursorsAvail.insert(cursor);
+			}
+		}
+	}
+
+	for ( auto i : _cursors ) {
+		if ( _accept.empty() && !_acceptAll ) {
+			i.second->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
+		}
+		else {
+			for ( auto j : _accept )
+				i.second->accept(j);
+		}
 	}
 
 	_cursorIter = _cursorsAvail.begin();
 	_transfer = true;
 
-	if ( !inAvail() )
+	if ( !inAvail() && !_cursorsAvail.empty() )
 		collectData();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -774,7 +989,7 @@ void SeedlinkSession::collectData() {
 	string buffer;
 	buffer.reserve(6000);
 
-	while ( _cursorsAvail.size() > 0 && buffer.size() < 5120 ) {
+	while ( !_cursorsAvail.empty() && buffer.size() < 5120 ) {
 		while ( _cursorIter != _cursorsAvail.end() ) {
 			RecordPtr rec = (*_cursorIter)->next();
 
@@ -802,7 +1017,7 @@ void SeedlinkSession::collectData() {
 			}
 			else {
 				if ( (*_cursorIter)->endOfData() )
-					_stations.erase((*_cursorIter)->ringName());
+					_cursors.erase((*_cursorIter)->ringName());
 
 				_cursorsAvail.erase(_cursorIter++);
 			}
@@ -811,8 +1026,10 @@ void SeedlinkSession::collectData() {
 		_cursorIter = _cursorsAvail.begin();
 	}
 
-	if ( _stations.empty() )
+	if ( _cursors.empty() ) {
 		buffer.append("END");
+		_transfer = false;
+	}
 
 	send(buffer.data(), buffer.size());
 }
@@ -837,6 +1054,65 @@ void SeedlinkSession::cursorAvail(CursorPtr c, Sequence seq) {
 
 	if ( _transfer && !inAvail() )
 		collectData();
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void SeedlinkSession::stationAvail(const string &name) {
+	StationPtr station;
+	map<string, StationPtr>::iterator i = _stations.find(name);
+	if ( i != _stations.end() ) {
+		if ( !checkAccess(name, _ipaddress, _user) ) {
+			SEISCOMP_INFO("access to %s denied for %s (%s)",
+				      name.c_str(),
+				      Wired::toString(_ipaddress).c_str(),
+				      _user.c_str());
+
+			return;
+		}
+
+		station = i->second;
+	}
+	else {
+		for ( auto j : _wildcardStations ) {
+			if ( j.second->match(name) ) {
+				if ( !checkAccess(name, _ipaddress, _user) ) {
+					SEISCOMP_DEBUG("access to %s denied for %s (%s)",
+						       name.c_str(),
+						       Wired::toString(_ipaddress).c_str(),
+						       _user.c_str());
+
+					continue;
+				}
+
+				station = j.second;
+				break;
+			}
+		}
+	}
+
+	if ( station ) {
+		RingPtr ring = _storage->ring(name);
+
+		if ( !ring )
+			throw logic_error("station " + name + " not found");
+
+		CursorPtr cursor = station->cursor(ring, *this);
+
+		if ( _accept.empty() && !_acceptAll ) {
+			cursor->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
+		}
+		else {
+			for ( auto j : _accept )
+				cursor->accept(j);
+		}
+
+		_cursors.insert(pair<string, CursorPtr>(name, cursor));
+		_cursorsAvail.insert(cursor);
+	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
