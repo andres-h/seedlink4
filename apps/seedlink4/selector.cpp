@@ -23,25 +23,25 @@ namespace Seedlink {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::initPattern(regex &r, const string &src, bool simple) {
+bool Selector::initPattern(regex &r, const string &src, bool ext) {
 	if ( src.length() == 0 ) {
 		r = regex(".*");
 		return true;
 	}
 
-	if (simple) {
-		if ( !regex_match(src, regex("[A-Z0-9\\-\\?]*")) )
+	if (ext) {
+		if ( !regex_match(src, regex("[A-Z0-9\\-\\?\\*]*")) )
 			return false;
 	}
 	else {
-		if ( !regex_match(src, regex("[A-Z0-9\\-\\?\\*]*")) )
+		if ( !regex_match(src, regex("[A-Z0-9\\-\\?]*")) )
 			return false;
 	}
 
 	string s = regex_replace(src, regex("-"), " ");
 	s = regex_replace(s, regex("\\?"), ".");
 
-	if ( !simple )
+	if ( ext )
 		s = regex_replace(s, regex("\\*"), ".*");
 
 	r = regex(s);
@@ -53,11 +53,10 @@ bool Selector::initPattern(regex &r, const string &src, bool simple) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::init(const string &selstr) {
+bool Selector::init(const string &selstr, bool ext) {
 	string loc = "";
 	string cha = "";
 	string type = "";
-	bool simple = false;
 	string s;
 
 	if (selstr[0] == '!') {
@@ -71,20 +70,30 @@ bool Selector::init(const string &selstr) {
 
 	size_t p = s.find_first_of('.');
 
-	if ( p != string::npos ) {
-		type = s.substr(p + 1);
-		s = s.substr(0, p);
-	}
+	if ( ext ) {
+		if ( p == string::npos )
+			return false;
 
-	p = s.find_first_of(':');
-
-	if ( p != string::npos ) {
 		loc = s.substr(0, p);
-		cha = s.substr(p + 1);
+		s = s.substr(p + 1);
+
+		p = s.find_first_of('.');
+
+		if ( p != string::npos ) {
+			cha = s.substr(0, p);
+			type = s.substr(p + 1);
+		}
+		else {
+			cha = s;
+		}
 	}
 	else {
 		// legacy format
-		simple = true;
+
+		if ( p != string::npos ) {
+			type = s.substr(p + 1);
+			s = s.substr(0, p);
+		}
 
 		if ( s.length() == 5 ) {
 			loc = s.substr(0, 2);
@@ -101,9 +110,9 @@ bool Selector::init(const string &selstr) {
 		}
 	}
 
-	return (initPattern(_rloc, loc, simple) &&
-		initPattern(_rcha, cha, simple) &&
-		initPattern(_rtype, type, simple) );
+	return (initPattern(_rloc, loc, ext) &&
+		initPattern(_rcha, cha, ext) &&
+		initPattern(_rtype, type, ext) );
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

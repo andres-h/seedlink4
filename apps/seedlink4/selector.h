@@ -29,7 +29,7 @@ namespace Seedlink {
 DEFINE_SMARTPOINTER(Selector);
 class Selector : public Core::BaseObject {
 	public:
-		bool init(const std::string &selstr);
+		bool init(const std::string &selstr, bool ext);
 		bool match(RecordPtr rec);
 		bool negative() { return _neg; }
 
@@ -39,7 +39,7 @@ class Selector : public Core::BaseObject {
 		std::regex _rcha;
 		std::regex _rtype;
 
-		bool initPattern(std::regex &r, const std::string &s, bool simple = false);
+		bool initPattern(std::regex &r, const std::string &s, bool ext);
 };
 
 }

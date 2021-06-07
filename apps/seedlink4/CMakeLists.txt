@@ -7,6 +7,7 @@ SET(
 		acl.cpp
 		app.cpp
 		format.cpp
+		info.cpp
 		mseed24.cpp
 		record.cpp
 		selector.cpp

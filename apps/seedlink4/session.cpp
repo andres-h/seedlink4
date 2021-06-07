@@ -18,10 +18,16 @@
 #include <seiscomp/core/strings.h>
 #include <seiscomp/client/inventory.h>
 #include <seiscomp/wired/reactor.h>
+#include <seiscomp/io/archive/jsonarchive.h>
+
+#include <boost/iostreams/stream.hpp>
+#include <boost/iostreams/device/back_inserter.hpp>
 
 #include "session.h"
 #include "settings.h"
 #include "version.h"
+#include "info.h"
+#include "info.ipp"
 
 
 using namespace std;
@@ -37,19 +43,11 @@ namespace Seedlink {
 
 
 #define CAPABILITIES "SLPROTO:4.0 " \
-		     TODO("WEBSOCKET:13 ") \
-		     "CAP " \
-		     TODO("EXTREPLY ") \
-		     "NSWILDCARD " \
-		     "BATCH " \
-		     "ASYNC " \
 		     "AUTH:USERPASS " \
 		     TODO("AUTH:TOKEN ") \
-		     "MULTISTATION " \
-		     "TIME " \
-		     TODO("INFO ")
+		     "TIME "
 
-
+#define SOFTWARE "SeedLink v4.0 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0 CAP GETCAP"
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 DEFINE_SMARTPOINTER(Station);
@@ -61,7 +59,7 @@ class Station : public Core::BaseObject {
 		void setDialup(bool dialup);
 		void setStart(Core::Time t);
 		void setEnd(Core::Time t);
-		bool select(const string &selstr);
+		bool select(const string &selstr, bool ext);
 		CursorPtr cursor(RingPtr ring, CursorClient &client);
 
 	private:
@@ -137,14 +135,14 @@ void Station::setEnd(Core::Time t) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Station::select(const string &selstr) {
+bool Station::select(const string &selstr, bool ext) {
 	if ( selstr.length() == 0 ) {
 		_selectors.clear();
 		return true;
 	}
 
 	SelectorPtr sel = new Selector();
-	if ( !sel->init(selstr) )
+	if ( !sel->init(selstr, ext) )
 		return false;
 
 	_selectors.push_back(sel);
@@ -190,13 +188,14 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 
 
 	private:
-                enum SessionType {
-                        Unspecific,
-                        Feed,
+		enum SessionType {
+			Unspecific,
+			Feed,
 			Client
-                };
+		};
 
 		Wired::Socket::IPAddress _ipaddress;
+		double _slproto;
 		string _user;
 		string _useragent;
 		SessionType _type;
@@ -227,6 +226,14 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		void handleInbox(const char *data, size_t len) override;
 		void handleDFT(const char *data, size_t len, int dft);
 		Core::Time parseTime(const char *data, size_t len);
+		void infoError(const string &code, const string &message);
+
+		template<int Version>
+		void handleInfo(InfoLevel level, const string &net, const string &sta);
+
+		template<typename T>
+		void sendJSON(T &info);
+
 		void handleFeed(const char *data, size_t len);
 		void sendResponse(const char *data);
 		void sendResponse(const char *data, int len);
@@ -248,7 +255,7 @@ SeedlinkListener::SeedlinkListener(StoragePtr storage,
 				   const ACL &defaultAccess,
 				   const map<string, ACL> &access,
 				   const map<string, string> &descriptions,
-                                   Wired::Socket *socket)
+				   Wired::Socket *socket)
 : Wired::Endpoint(socket)
 , _storage(storage), _formats(formats), _trusted(trusted)
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions) {
@@ -279,7 +286,7 @@ SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 				 const map<string, ACL> &access,
 				 const map<string, string> &descriptions)
 : Wired::ClientSession(sock, 200)
-, _type(Unspecific), _storage(storage), _formats(formats), _trusted(trusted)
+, _slproto(0.0), _type(Unspecific), _storage(storage), _formats(formats), _trusted(trusted)
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions)
 , _wildcard(false), _transfer(false), _batch(false) {
 	_ipaddress = sock->address();
@@ -362,24 +369,109 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 	SEISCOMP_DEBUG("$ %s", data);
 
-	stopTransfer();
-
 	const char *tok;
 	size_t tokLen;
 	if ( !(tok = Core::tokenize(data, " ", len, tokLen)) ) {
 		return;
 	}
 
+	if ( tokLen == 4 && strncasecmp(tok, "INFO", tokLen) == 0 ) {
+		_type = Client;
+
+		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
+			infoError("ARGUMENTS", "missing level");
+			return;
+		}
+
+		InfoLevel level;
+
+		if ( !strncasecmp(tok, "ID", tokLen) ) {
+			level = INFO_ID;
+		}
+		else if ( !strncasecmp(tok, "DATATYPES", tokLen) ) {
+			level = INFO_DATATYPES;
+		}
+		else if ( !strncasecmp(tok, "STATIONS", tokLen) ) {
+			level = INFO_STATIONS;
+		}
+		else if ( !strncasecmp(tok, "STREAMS", tokLen) ) {
+			level = INFO_STREAMS;
+		}
+		else if ( !strncasecmp(tok, "CONNECTIONS", tokLen) ) {
+			level = INFO_CONNECTIONS;
+		}
+		else {
+			infoError("ARGUMENTS", "requested info level is not supported");
+			return;
+		}
+
+		string net = "*";
+		string sta = "*";
+
+		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+			sta = string(tok, tokLen);
+
+			if ( !regex_match(sta, regex("[A-Z0-9\\-\\?\\*]*")) ) {
+				infoError("ARGUMENTS", "invalid station pattern");
+				return;
+			}
+
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+				net = string(tok, tokLen);
+
+				if ( !regex_match(net, regex("[A-Z0-9\\-\\?\\*]*")) ) {
+					infoError("ARGUMENTS", "invalid network pattern");
+					return;
+				}
+			}
+		}
+
+		// TODO: should be queued and executed in collectData()
+		if ( _slproto >= 4.0 )
+			handleInfo<4>(level, net, sta);
+		else
+			handleInfo<3>(level, net, sta);
+
+		return;
+	}
+
+	// Only INFO is allowed in data transfer phase.
+	// This implementation just ignores any other commands.
+	if ( _transfer ) return;
+
 	if ( tokLen == 5 && strncasecmp(tok, "HELLO", tokLen) == 0 ) {
-		sendResponse("SeedLink4 v4 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0 CAP GETCAP\r\n");
+		sendResponse(SOFTWARE "\r\n");
 		sendResponse(global.organization.c_str(), static_cast<int>(global.organization.size()));
 		sendResponse("\r\n");
 		return;
 	}
 
-	if ( tokLen == 5 && strncasecmp(tok, "BATCH", tokLen) == 0 ) {
-		_batch = true;
+	if ( tokLen == 7 && strncasecmp(tok, "SLPROTO", tokLen) == 0 ) {
+		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
+			sendResponse("ERROR\r\n");
+			return;
+		}
+
+		double val;
+		if ( !Core::fromString(val, string(tok, tokLen)) ) {
+			sendResponse("ERROR\r\n");
+			return;
+		}
+
+		_slproto = val;
 		sendResponse("OK\r\n");
+		return;
+	}
+
+	if ( tokLen == 5 && strncasecmp(tok, "BATCH", tokLen) == 0 ) {
+		if ( _slproto < 4.0 ) {
+			_batch = true;
+			sendResponse("OK\r\n");
+		}
+		else {
+			sendResponse("ERROR UNSUPPORTED\r\n");
+		}
+
 		return;
 	}
 
@@ -460,21 +552,6 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		return;
 	}
 
-	if ( tokLen == 6 && strncasecmp(tok, "ENABLE", tokLen) == 0 ) {
-		// TODO
-		sendResponse("ERROR\r\n");
-		return;
-	}
-
-	if ( tokLen == 12 && strncasecmp(tok, "CAPABILITIES", tokLen) == 0 ) {
-		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			// TODO
-		}
-
-		if ( !_batch ) sendResponse("OK\r\n");
-		return;
-	}
-
 	if ( tokLen == 15 && strncasecmp(tok, "GETCAPABILITIES", tokLen) == 0 ) {
 		sendResponse(CAPABILITIES "\r\n");
 		return;
@@ -522,13 +599,18 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		_type = Client;
 
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if ( !_currentStation->select(string(tok, tokLen)) ) {
-				if ( !_batch ) sendResponse("ERROR\r\n");
+			if ( !_currentStation->select(string(tok, tokLen), (_slproto >= 4.0)) ) {
+				if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS\r\n");
+				else if ( !_batch ) sendResponse("ERROR\r\n");
 				return;
 			}
 		}
+		else if ( _slproto < 4.0 ) {
+			_currentStation->select("", false);
+		}
 		else {
-			_currentStation->select("");
+			sendResponse("ERROR ARGUMENTS\r\n");
+			return;
 		}
 
 		if ( !_batch ) sendResponse("OK\r\n");
@@ -549,7 +631,14 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 	if ( tokLen == 4 && strncasecmp(tok, "TIME", tokLen) == 0 ) {
 		_type = Client;
-		handleDFT(data, len, 3);
+
+		if ( _slproto < 4.0 ) {
+			_type = Client;
+			handleDFT(data, len, 3);
+		}
+		else {
+			sendResponse("ERROR UNSUPPORTED\r\n");
+		}
 		return;
 	}
 
@@ -567,6 +656,8 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	}
 
 	if ( tokLen == 3 && strncasecmp(tok, "CAT", tokLen) == 0 ) {
+		_type = Client;
+
 		for ( const auto &name : _storage->cat() ) {
 			if ( !checkAccess(name, _ipaddress, _user) )
 				continue;
@@ -576,7 +667,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 				string net = name.substr(0, sep);
 				string sta = name.substr(sep + 1);
 				auto descIt = _descriptions.find(name);
-				string desc = (descIt != _descriptions.end())? descIt->second: sta;
+				string desc = (descIt != _descriptions.end())? descIt->second: name;
 				sendResponse((net + " " + sta + " " + desc + "\r\n").c_str());
 			}
 		}
@@ -736,6 +827,97 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 		return Core::Time::Null;
 
 	return Core::Time(t[0], t[1], t[2], t[3], t[4], t[5], t[6] / 1000);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+template<int Version>
+void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const string &sta) {
+	if ( Version != 4 ) {  // TODO
+		return;
+	}
+
+	Info<Version> info(SOFTWARE, global.organization, Core::Time(), level);
+
+	if ( level >= INFO_DATATYPES ) {
+		// TODO
+	}
+
+	if ( level >= INFO_STATIONS ) {
+		string s = regex_replace(net + "\\." + sta, regex("\\?"), ".");
+		s = regex_replace(s, regex("\\*"), ".*");
+		regex r = regex(s);
+
+		for ( const auto &name : _storage->cat() ) {
+			if ( !checkAccess(name, _ipaddress, _user) ||
+					!regex_match(name, r) )
+				continue;
+
+			RingPtr ring = _storage->ring(name);
+
+			if ( !ring )
+				throw logic_error("station " + name + " not found");
+
+			auto descIt = _descriptions.find(name);
+			string desc = (descIt != _descriptions.end())? descIt->second: name;
+			info.addStation(ring, desc);
+		}
+	}
+
+	if ( level >= INFO_CONNECTIONS ) {
+		if ( !_trusted.check(_ipaddress, _user) ) {
+			infoError("UNAUTHORIZED", "requested info level is not allowed");
+			return;
+		}
+
+		// TODO
+		infoError("ARGUMENTS", "requested info level is not implemented");
+		return;
+	}
+
+	sendJSON<Info<Version> >(info);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void SeedlinkSession::infoError(const string &code, const string &message) {
+	InfoError info(code, message);
+	sendJSON<InfoError>(info);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+template<typename T>
+void SeedlinkSession::sendJSON(T &info) {
+	string data;
+
+	{
+		boost::iostreams::stream_buffer<boost::iostreams::back_insert_device<std::string> > buf(data);
+		IO::JSONArchive ar;
+		ar.create(&buf, false);
+		info.serialize(ar);
+
+		if ( !ar.success() )
+			throw runtime_error("failed to serialize info");
+	}
+
+	string header;
+	header.reserve(16);
+	uint32_t length = data.size() + 8;
+	header.append("SEI\0", 4);
+	header.append((char *)&length, 4); // TODO: byteorder
+	header.append("\0\0\0\0\0\0\0\0", 8);
+	send(header.data(), header.size());
+	send(data.data(), data.size());
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

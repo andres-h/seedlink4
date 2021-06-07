@@ -124,10 +124,42 @@ class CursorOwner {
 };
 
 
+DEFINE_SMARTPOINTER(Stream);
+class Stream : public Core::BaseObject {
+	template<int Version>
+	friend class StreamInfo;
+
+	public:
+		Stream(const std::string &loc,
+		       const std::string &cha,
+		       const std::string &type,
+		       const Core::Time &starttime,
+		       const Core::Time &endtime);
+
+		//void setStartTime(const Core::Time &starttime);
+		//void setEndTime(const Core::Time &endtime);
+
+		//Core::Time startTime();
+		//Core::Time endTime();
+
+	private:
+		std::string _loc;
+		std::string _cha;
+		std::string _type;
+		Core::Time _starttime;
+		Core::Time _endtime;
+};
+
+
 DEFINE_SMARTPOINTER(Ring);
 class Ring : public Core::BaseObject, private CursorOwner {
+	template<int Version>
+	friend class RingInfo;
+
 	public:
-		Ring(const std::string &path, const std::string &name, int nsegments, int segsize, int blocksize);
+		Ring(const std::string &path, const std::string &name,
+		     int nsegments, int segsize, int blocksize);
+
 		Ring(const std::string &path, const std::string &name);
 
 		bool check(int nsegments, int segsize, int blocksize);
@@ -143,6 +175,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		Sequence _baseseq;
 		Sequence _endseq;
 		std::deque<SegmentPtr> _segments;
+		std::map<std::string, StreamPtr> _streams;
 		std::set<Cursor*> _cursors;
 
 		void removeCursor(Cursor* c);

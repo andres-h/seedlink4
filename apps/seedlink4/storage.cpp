@@ -396,6 +396,19 @@ void Cursor::dataAvail(Sequence seq) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Stream::Stream(const string &loc,
+	       const string &cha,
+	       const string &type,
+	       const Core::Time &starttime,
+	       const Core::Time &endtime)
+: _loc(loc), _cha(cha), _type(type), _starttime(starttime), _endtime(endtime) {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Ring::Ring(const string &path, const string &name, int nsegments, int segsize, int blocksize)
 : _path(path + "/" + name), _name(name), _nsegments(nsegments), _segsize(segsize), _blocksize(blocksize)
 , _baseseq(0), _endseq(0), _segments(nsegments) {

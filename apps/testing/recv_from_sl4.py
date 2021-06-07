@@ -25,6 +25,9 @@ def main():
     isock.connect(('localhost', 18000))
     ifd = isock.makefile('rwb')
 
+    ifd.write(b"SLPROTO 4.0\r\n")
+    ifd.flush()
+    expect(ifd, b"OK")
     # 50 = ord('2') = FMT_MSEED24
     ifd.write(b"ACCEPT 50 51\r\n")
     ifd.flush()

@@ -158,7 +158,8 @@ bool Application::init() {
 		}
 	}
 	catch (const exception &e) {
-		SEISCOMP_ERROR(e.what());
+               SEISCOMP_ERROR("%s", e.what());
+               return false;
 	}
 
 	return true;
