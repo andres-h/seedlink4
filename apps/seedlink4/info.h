@@ -35,47 +35,50 @@ enum InfoLevel {
 	INFO_CONNECTIONS
 };
 
-
-template<int Version>
+DEFINE_SMARTPOINTER(StreamInfo);
 class StreamInfo : public Core::BaseObject {
 	public:
-		StreamInfo() {}
-		StreamInfo(StreamPtr stream);
+		StreamInfo(double slproto, StreamPtr stream);
+
 		void serialize(Core::Archive &ar);
 
 	private:
+		double _slproto;
 		StreamPtr _stream;
 };
 
 
-template<int Version>
+DEFINE_SMARTPOINTER(RingInfo);
 class RingInfo : public Core::BaseObject {
 	public:
-		RingInfo() {}
-		RingInfo(RingPtr ring, const std::string &description, InfoLevel level);
+		RingInfo(double slproto, RingPtr ring, const std::string &description, InfoLevel level);
+
 		void serialize(Core::Archive &ar);
 
 	private:
+		double _slproto;
 		RingPtr _ring;
 		std::string _description;
 		InfoLevel _level;
 };
 
 
-template<int Version>
+DEFINE_SMARTPOINTER(Info);
 class Info : public Core::BaseObject {
 	public:
-		Info() {}
-		Info(const std::string &software, const std::string &organization, const Core::Time &started, InfoLevel level);
+		Info(double slproto, const std::string &software, const std::string &organization,
+		     const Core::Time &started, InfoLevel level);
+
 		void addStation(RingPtr ring, const std::string &description);
 		void serialize(Core::Archive &ar);
 
 	private:
+		double _slproto;
 		std::string _software;
 		std::string _organization;
 		Core::Time _started;
 		InfoLevel _level;
-		std::list<RingInfo<Version> > _ringInfo;
+		std::list<RingInfoPtr> _ringInfo;
 };
 
 
@@ -83,6 +86,7 @@ class Error : public Core::BaseObject {
 	public:
 		Error() {}
 		Error(const std::string &code, const std::string &message);
+
 		void serialize(Core::Archive &ar);
 
 	private:
@@ -91,13 +95,14 @@ class Error : public Core::BaseObject {
 };
 
 
-class InfoError : public Core::BaseObject {
+class InfoError : public Info {
 	public:
-		InfoError() {}
-		InfoError(const std::string &code, const std::string &message);
+		InfoError(double slproto, const std::string &software, const std::string &organization,
+			  const Core::Time &started, const std::string &code, const std::string &message);
 		void serialize(Core::Archive &ar);
 
 	private:
+		double _slproto;
 		Error _error;
 };
 

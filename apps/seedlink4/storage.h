@@ -126,7 +126,6 @@ class CursorOwner {
 
 DEFINE_SMARTPOINTER(Stream);
 class Stream : public Core::BaseObject {
-	template<int Version>
 	friend class StreamInfo;
 
 	public:
@@ -153,7 +152,6 @@ class Stream : public Core::BaseObject {
 
 DEFINE_SMARTPOINTER(Ring);
 class Ring : public Core::BaseObject, private CursorOwner {
-	template<int Version>
 	friend class RingInfo;
 
 	public:
@@ -163,6 +161,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		Ring(const std::string &path, const std::string &name);
 
 		bool check(int nsegments, int segsize, int blocksize);
+		void setOrdered(bool ordered);
 		bool put(RecordPtr buf, Sequence seq, bool seq24bit);
 		CursorPtr cursor(CursorClient &client);
 
@@ -174,6 +173,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		int _blocksize;
 		Sequence _baseseq;
 		Sequence _endseq;
+		bool _ordered;
 		std::deque<SegmentPtr> _segments;
 		std::map<std::string, StreamPtr> _streams;
 		std::set<Cursor*> _cursors;

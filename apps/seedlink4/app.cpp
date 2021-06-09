@@ -110,6 +110,10 @@ bool Application::init() {
 							   segsize,
 							   recsize);
 
+			bool ordered = false;
+			keys->getBool(ordered, "ordered");
+			ring->setOrdered(ordered);
+
 			string accessStr = global.access;
 			if ( !keys->getString(accessStr, "access") )
 				SEISCOMP_INFO("%s %s using default access = %s",

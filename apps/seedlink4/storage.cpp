@@ -436,7 +436,7 @@ Ring::Ring(const string &path, const string &name, int nsegments, int segsize, i
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Ring::Ring(const string &path, const string &name)
 : _path(path + "/" + name), _name(name), _nsegments(0), _segsize(0), _blocksize(0)
-, _baseseq(UNSET), _endseq(0) {
+, _baseseq(UNSET), _endseq(0), _ordered(false) {
 	// TODO: Quick save/restore ring state.
 	// TODO: Reduce the number of file descriptors needed (eg., caching,
 	// perhaps using a single circular buffer instead of multiple segments).
@@ -541,6 +541,15 @@ bool Ring::check(int nsegments, int segsize, int blocksize) {
 	return result;
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Ring::setOrdered(bool ordered) {
+	_ordered = ordered;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 
 
