@@ -656,18 +656,20 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			if ( !_currentStation->select(string(tok, tokLen), (_slproto >= 4.0)) ) {
 				if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS\r\n");
 				else if ( !_batch ) sendResponse("ERROR\r\n");
+				return;
 			}
 		}
 		else {
 			if ( _slproto >= 4.0 ) {
 				sendResponse("ERROR ARGUMENTS empty SELECT is not allowed in v4\r\n");
+				return;
 			}
 			else {
 				_currentStation->select("", false);
-				if ( !_batch ) sendResponse("OK\r\n");
 			}
 		}
 
+		if ( !_batch ) sendResponse("OK\r\n");
 		return;
 	}
 
@@ -1027,18 +1029,26 @@ void SeedlinkSession::sendMSXML(InfoPtr info, const char *chan) {
 	msr->numsamples = data.size();
 	msr->sampletype = 'a';
 
+	int64_t packedsamples = 0;
+
 	msr_pack(msr, [](char *record, int reclen, void *handlerdata) {
 		SeedlinkSession* obj = reinterpret_cast<SeedlinkSession *>(handlerdata);
 		obj->send("SLINFO *", 8);
 		obj->send(record, reclen);
-	}, this, NULL, false, false);
+	}, this, &packedsamples, false, false);
 
-	msr_pack(msr, [](char *record, int reclen, void *handlerdata) {
-		SeedlinkSession* obj = reinterpret_cast<SeedlinkSession *>(handlerdata);
-		obj->send("SLINFO  ", 8);
-		obj->send(record, reclen);
-	}, this, NULL, true, false);
+	if ( (size_t)packedsamples < data.size() ) {
+		msr->datasamples = (void *)(data.data() + (size_t)packedsamples);
+		msr->numsamples = data.size() - (size_t)packedsamples;
 
+		msr_pack(msr, [](char *record, int reclen, void *handlerdata) {
+			SeedlinkSession* obj = reinterpret_cast<SeedlinkSession *>(handlerdata);
+			obj->send("SLINFO  ", 8);
+			obj->send(record, reclen);
+		}, this, NULL, true, false);
+	}
+
+	msr->datasamples = NULL;
 	msr_free(&msr);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
