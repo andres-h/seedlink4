@@ -21,7 +21,9 @@ namespace Seedlink {
 
 class Mseed24Format : public Format {
 	public:
-		ssize_t readRecord(const void *buf, size_t len, RecordPtr &p);
+		Mseed24Format(): Format(FMT_MSEED24, "application/vnd.fdsn.mseed") {}
+
+		ssize_t readRecord(const void *buf, size_t len, RecordPtr &rec);
 };
 
 }

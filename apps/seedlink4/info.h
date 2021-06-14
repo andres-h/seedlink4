@@ -20,6 +20,7 @@
 #include <seiscomp/core/io.h>
 
 #include "storage.h"
+#include "format.h"
 
 
 namespace Seiscomp {
@@ -29,7 +30,7 @@ namespace Seedlink {
 
 enum InfoLevel {
 	INFO_ID,
-	INFO_DATATYPES,
+	INFO_FORMATS,
 	INFO_STATIONS,
 	INFO_STREAMS,
 	INFO_CONNECTIONS
@@ -63,6 +64,18 @@ class RingInfo : public Core::BaseObject {
 };
 
 
+DEFINE_SMARTPOINTER(FormatInfo);
+class FormatInfo : public Core::BaseObject {
+	public:
+		FormatInfo(double slproto);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+};
+
+
 DEFINE_SMARTPOINTER(Info);
 class Info : public Core::BaseObject {
 	public:
@@ -78,7 +91,7 @@ class Info : public Core::BaseObject {
 		std::string _organization;
 		Core::Time _started;
 		InfoLevel _level;
-		std::list<RingInfoPtr> _ringInfo;
+		std::list<RingInfoPtr> _stations;
 };
 
 
@@ -99,6 +112,7 @@ class InfoError : public Info {
 	public:
 		InfoError(double slproto, const std::string &software, const std::string &organization,
 			  const Core::Time &started, const std::string &code, const std::string &message);
+
 		void serialize(Core::Archive &ar);
 
 	private:

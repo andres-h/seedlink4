@@ -121,9 +121,9 @@ bool Selector::init(const string &selstr, bool ext) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Selector::match(RecordPtr rec) {
-	return (regex_match(rec->locationCode(), _rloc) &&
-		regex_match(rec->channelCode(), _rcha) &&
-		regex_match(rec->typeCode(), _rtype));
+	return (regex_match(rec->location(), _rloc) &&
+		regex_match(rec->channel(), _rcha) &&
+		regex_match(rec->type(), _rtype));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

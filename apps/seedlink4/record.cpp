@@ -23,18 +23,23 @@ namespace Seedlink {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Record::serializeHeader(Core::Archive &ar) {
-	Core::Time ts = Core::Time(_timespan);  // (temporary?) hack to serialize Core::TimeSpan
 	bool valid = true;  // marks the beginning of a valid record
+
+	// TODO: implement uint64_t serialization
+	int seq = _seq;
+
 	ar & NAMED_OBJECT_HINT("valid", valid, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("networkCode", _net, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("stationCode", _sta, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("locationCode", _loc, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("channelCode", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("typeCode", _type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("seq", seq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("network", _net, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("station", _sta, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("type", _type, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("timeSpan", ts, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("format", _format, Core::Archive::STATIC_TYPE);
-	_timespan = Core::TimeSpan(ts);
+
+	_seq = seq;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

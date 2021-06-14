@@ -67,9 +67,6 @@ bool Application::init() {
 	try {
 		StoragePtr storage = new Storage(global.filebase);
 
-		map<FormatCode, FormatPtr> formats;
-		formats.insert(pair<FormatCode, FormatPtr>(FMT_MSEED24, new Mseed24Format()));
-
 		ACL trusted(global.trusted);
 		ACL defaultAccess(global.access);
 		map<string, ACL> access;
@@ -103,10 +100,10 @@ bool Application::init() {
 			RingPtr ring = storage->ring(i.networkCode() + "." + i.stationCode());
 
 			if ( ring )
-				ring->check(segments, segsize, recsize);
+				ring->ensure(segments * segsize, recsize);
 			else
 				ring = storage->createRing(i.networkCode() + "." + i.stationCode(),
-							   segments,
+							   segments *
 							   segsize,
 							   recsize);
 
@@ -137,7 +134,6 @@ bool Application::init() {
 		}
 
 		SeedlinkListener* listener = new SeedlinkListener(storage,
-								  formats,
 								  trusted,
 								  defaultAccess,
 								  access,

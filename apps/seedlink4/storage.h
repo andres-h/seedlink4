@@ -31,39 +31,6 @@ namespace Applications {
 namespace Seedlink {
 
 
-typedef uint64_t Sequence;
-const Sequence UNSET = Sequence(-1);
-
-
-DEFINE_SMARTPOINTER(Segment);
-class Segment : public Core::BaseObject {
-	public:
-		Segment(const std::string &path, Sequence baseseq, int nblocks, int blocksize);
-
-		~Segment();
-
-		void remove();
-		Sequence startSeq() { return _startseq; }
-		Sequence endSeq() { return _endseq; }
-		Core::Time startEndTime() { return _startendtime; }
-		Core::Time endtime() { return _endtime; }
-
-		void put(RecordPtr rec, Sequence seq);
-		RecordPtr get(Sequence seq);
-
-	private:
-		std::string _path;
-		const Sequence _baseseq;
-		const int _nblocks;
-		const int _blocksize;
-		Sequence _startseq;
-		Sequence _endseq;
-		Core::Time _startendtime;
-		Core::Time _endtime;
-		std::streambuf *_sb;
-};
-
-
 class CursorOwner;
 class CursorClient;
 
@@ -72,11 +39,7 @@ class Cursor : public Core::BaseObject {
 	public:
 		Cursor(CursorOwner &owner,
 		       CursorClient &client,
-		       const std::string &ringName,
-		       const std::deque<SegmentPtr> &segments)
-		: _owner(owner), _client(client), _ringName(ringName)
-		, _segments(segments), _segmentIndex(0), _seq(UNSET)
-		, _dialup(false), _has_data(false), _eod(false) {}
+		       const std::string &ringName);
 
 		~Cursor();
 
@@ -97,9 +60,8 @@ class Cursor : public Core::BaseObject {
 		CursorOwner &_owner;
 		CursorClient &_client;
 		const std::string _ringName;
-		const std::deque<SegmentPtr> &_segments;
-		unsigned int _segmentIndex;
 		Sequence _seq;
+		bool _seq24bit;
 		bool _dialup;
 		bool _has_data;
 		bool _eod;
@@ -121,25 +83,33 @@ class CursorClient {
 class CursorOwner {
 	public:
 		virtual void removeCursor(Cursor* c) =0;
+		virtual RecordPtr get(Sequence seq, bool seq24bit) =0;
 };
 
 
 DEFINE_SMARTPOINTER(Stream);
 class Stream : public Core::BaseObject {
+	DECLARE_SC_CLASS(Stream)
 	friend class StreamInfo;
 
 	public:
+		Stream(): _format(0) {}
 		Stream(const std::string &loc,
 		       const std::string &cha,
 		       const std::string &type,
 		       const Core::Time &starttime,
-		       const Core::Time &endtime);
+		       const Core::Time &endtime,
+		       FormatCode format);
 
-		//void setStartTime(const Core::Time &starttime);
-		//void setEndTime(const Core::Time &endtime);
+		std::string id();
 
-		//Core::Time startTime();
-		//Core::Time endTime();
+		Core::Time startTime();
+		Core::Time endTime();
+
+		void setStartTime(const Core::Time &starttime);
+		void setEndTime(const Core::Time &endtime);
+
+		void serialize(Core::Archive &ar);
 
 	private:
 		std::string _loc;
@@ -147,6 +117,7 @@ class Stream : public Core::BaseObject {
 		std::string _type;
 		Core::Time _starttime;
 		Core::Time _endtime;
+		FormatCode _format;
 };
 
 
@@ -156,29 +127,34 @@ class Ring : public Core::BaseObject, private CursorOwner {
 
 	public:
 		Ring(const std::string &path, const std::string &name,
-		     int nsegments, int segsize, int blocksize);
+		     int nblocks=0, int blocksize=0);
 
-		Ring(const std::string &path, const std::string &name);
+		~Ring();
 
-		bool check(int nsegments, int segsize, int blocksize);
 		void setOrdered(bool ordered);
+		void serialize(Core::Archive &ar);
+		bool load();
+		void save();
+		bool ensure(int nblocks, int blocksize);
 		bool put(RecordPtr buf, Sequence seq, bool seq24bit);
 		CursorPtr cursor(CursorClient &client);
 
 	private:
 		const std::string _path;
 		const std::string _name;
-		int _nsegments;
-		int _segsize;
+		int _nblocks;
 		int _blocksize;
+		int _shift;
 		Sequence _baseseq;
+		Sequence _startseq;
 		Sequence _endseq;
 		bool _ordered;
-		std::deque<SegmentPtr> _segments;
+		std::streambuf *_sb;
 		std::map<std::string, StreamPtr> _streams;
 		std::set<Cursor*> _cursors;
 
 		void removeCursor(Cursor* c);
+		RecordPtr get(Sequence seq, bool seq24bit);
 };
 
 
@@ -188,9 +164,8 @@ class Storage : public Core::BaseObject {
 		Storage(const std::string &path);
 
 		RingPtr createRing(const std::string &name,
-			     int nsegments,
-			     int segsize,
-			     int recsize);
+				   int nblocks,
+				   int blocksize);
 
 		RingPtr ring(const std::string &name);
 

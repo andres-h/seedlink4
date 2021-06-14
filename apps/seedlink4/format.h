@@ -23,10 +23,24 @@ namespace Applications {
 namespace Seedlink {
 
 
-DEFINE_SMARTPOINTER(Format);
 class Format : public Core::BaseObject {
+	friend class FormatInfo;
+
 	public:
-		virtual ssize_t readRecord(const void *buf, size_t len, RecordPtr &p) =0;
+		Format(FormatCode code, const std::string &mimetype);
+
+		virtual ssize_t readRecord(const void *buf, size_t len, RecordPtr &rec) =0;
+
+		static Format* get(FormatCode code);
+
+	private:
+		FormatCode _code;
+		std::string _mimetype;
+
+		static std::map<FormatCode, Format*> _instances;
+
+	protected:
+		FormatCode formatCode() { return _code; }
 };
 
 }

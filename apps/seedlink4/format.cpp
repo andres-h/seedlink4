@@ -22,6 +22,30 @@ namespace Applications {
 namespace Seedlink {
 
 
+std::map<FormatCode, Format*> Format::_instances;
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Format::Format(FormatCode code, const std::string &mimetype)
+: _code(code), _mimetype(mimetype) {
+	_instances.insert(pair<FormatCode, Format*>(code, this));
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Format* Format::get(FormatCode code) {
+	auto it = _instances.find(code);
+
+	if ( it == _instances.end() )
+		return NULL;
+
+	return it->second;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 }
 }
 }

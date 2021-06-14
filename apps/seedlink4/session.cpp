@@ -179,7 +179,6 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 	public:
 		SeedlinkSession(Wired::Socket *sock,
 			       	StoragePtr storage,
-				const map<FormatCode, FormatPtr> &formats,
 				const ACL &trusted,
 				const ACL &defaultAccess,
 				const map<string, ACL> &access,
@@ -203,7 +202,6 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		string _useragent;
 		SessionType _type;
 		StoragePtr _storage;
-		const map<FormatCode, FormatPtr> &_formats;
 		const ACL &_trusted;
 		const ACL &_defaultAccess;
 		const map<string, ACL> &_access;
@@ -249,14 +247,13 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 SeedlinkListener::SeedlinkListener(StoragePtr storage,
-				   const map<FormatCode, FormatPtr> &formats,
 				   const ACL &trusted,
 				   const ACL &defaultAccess,
 				   const map<string, ACL> &access,
 				   const map<string, string> &descriptions,
 				   Wired::Socket *socket)
 : Wired::Endpoint(socket)
-, _storage(storage), _formats(formats), _trusted(trusted)
+, _storage(storage), _trusted(trusted)
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -267,7 +264,7 @@ SeedlinkListener::SeedlinkListener(StoragePtr storage,
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 	socket->setMode(Wired::Socket::Read);
-	return new SeedlinkSession(socket, _storage, _formats, _trusted,
+	return new SeedlinkSession(socket, _storage, _trusted,
 				   _defaultAccess, _access, _descriptions);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -279,13 +276,12 @@ Wired::Session *SeedlinkListener::createSession(Wired::Socket *socket) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 				 StoragePtr storage,
-				 const map<FormatCode, FormatPtr> &formats,
 				 const ACL &trusted,
 				 const ACL &defaultAccess,
 				 const map<string, ACL> &access,
 				 const map<string, string> &descriptions)
 : Wired::ClientSession(sock, 200)
-, _slproto(0.0), _type(Unspecific), _storage(storage), _formats(formats), _trusted(trusted)
+, _slproto(0.0), _type(Unspecific), _storage(storage), _trusted(trusted)
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions)
 , _wildcard(false), _transfer(false), _batch(false) {
 	_ipaddress = sock->address();
@@ -385,19 +381,25 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 		InfoLevel level;
 
-		if ( !strncasecmp(tok, "ID", tokLen) ) {
+		if ( tokLen == 2 && !strncasecmp(tok, "ID", tokLen) ) {
 			level = INFO_ID;
 		}
-		else if ( !strncasecmp(tok, "DATATYPES", tokLen) ) {
-			level = INFO_DATATYPES;
+		else if ( tokLen == 7 && !strncasecmp(tok, "FORMATS", tokLen) ) {
+			if ( _slproto >= 4.0 ) {
+				level = INFO_FORMATS;
+			}
+			else {
+				infoError("ARGUMENTS", "requested info level is not supported");
+				return;
+			}
 		}
-		else if ( !strncasecmp(tok, "STATIONS", tokLen) ) {
+		else if ( tokLen == 8 && !strncasecmp(tok, "STATIONS", tokLen) ) {
 			level = INFO_STATIONS;
 		}
-		else if ( !strncasecmp(tok, "STREAMS", tokLen) ) {
+		else if ( tokLen == 7 && !strncasecmp(tok, "STREAMS", tokLen) ) {
 			level = INFO_STREAMS;
 		}
-		else if ( !strncasecmp(tok, "CONNECTIONS", tokLen) ) {
+		else if ( tokLen == 11 && !strncasecmp(tok, "CONNECTIONS", tokLen) ) {
 			level = INFO_CONNECTIONS;
 		}
 		else {
@@ -453,7 +455,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			return;
 		}
 
-		if ( val == 0.0 || _slproto != 0.0 ) {
+		if ( _slproto != 0.0 ) {
 			sendResponse("ERROR UNSUPPORTED multiple protocol switches\r\n");
 			return;
 		}
@@ -757,7 +759,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
-	_currentStation->setSequence(UNSET);
+	_currentStation->setSequence(SEQ_UNSET);
 	_currentStation->setStart(Core::Time::Null);
 	_currentStation->setEnd(Core::Time::Null);
 	_currentStation->setDialup(dft == 2);
@@ -789,7 +791,7 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 				size_t end;
 				unsigned long long seq = stoull(string(tok, tokLen), &end, 16);
 
-				if ( end == tokLen && seq < UNSET) {
+				if ( end == tokLen && seq < SEQ_UNSET) {
 					if ( _slproto >= 4.0 ) {
 						_currentStation->setSequence(seq, false);
 					}
@@ -916,10 +918,6 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const string &sta) {
 	InfoPtr info = new Info(_slproto, SOFTWARE, global.organization, Core::Time(), level);
-
-	if ( level >= INFO_DATATYPES ) {
-		// TODO
-	}
 
 	if ( level >= INFO_STATIONS ) {
 		string s = regex_replace(net + "\\." + sta, regex("\\?"), ".");
@@ -1078,7 +1076,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			formatCode = FMT_MSEED24;
 			packetLength = 520;
 			headerLength = 8;
-			seq = UNSET;
+			seq = SEQ_UNSET;
 			seq24bit = true;
 
 			try {
@@ -1113,22 +1111,22 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		if ( len < packetLength )  // not enough data
 			break;
 
-		map<FormatCode, FormatPtr>::const_iterator it = _formats.find(formatCode);
-		if ( it == _formats.end() ) {
+		Format* format = Format::get(formatCode);
+		if ( !format ) {
 			SEISCOMP_ERROR("unsupported format");
 			close();
 			return;
 		}
 
 		RecordPtr rec;
-		if ( it->second->readRecord(data + headerLength, packetLength - headerLength, rec) <= 0 ) {
+		if ( format->readRecord(data + headerLength, packetLength - headerLength, rec) <= 0 ) {
 			SEISCOMP_ERROR("invalid data");
 			data += packetLength;
 			len -= packetLength;
 			continue;
 		}
 
-		string ringName = rec->networkCode() + "." + rec->stationCode();
+		string ringName = rec->network() + "." + rec->station();
 
 		RingPtr ring = _storage->ring(ringName);
 
@@ -1136,7 +1134,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			SEISCOMP_INFO("new station %s", ringName.c_str());
 
 			ring = _storage->createRing(ringName,
-						    global.segments,
+						    global.segments *
 						    global.segsize,
 						    global.recsize);
 
@@ -1156,10 +1154,10 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 
 		if ( !ring->put(rec, seq, seq24bit) )
 			SEISCOMP_WARNING("dropped %s.%s.%s.%s seq %0*llX",
-					 rec->networkCode().c_str(),
-					 rec->stationCode().c_str(),
-					 rec->locationCode().c_str(),
-					 rec->channelCode().c_str(),
+					 rec->network().c_str(),
+					 rec->station().c_str(),
+					 rec->location().c_str(),
+					 rec->channel().c_str(),
 					 seq24bit? 6: 16,
 					 (unsigned long long)seq);
 
@@ -1204,7 +1202,7 @@ void SeedlinkSession::startTransfer() {
 
 		if ( !ring ) {
 			ring = _storage->createRing(name,
-						    global.segments,
+						    global.segments *
 						    global.segsize,
 						    global.recsize);
 

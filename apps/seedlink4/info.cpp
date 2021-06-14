@@ -31,11 +31,23 @@ StreamInfo::StreamInfo(double slproto, StreamPtr stream)
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void StreamInfo::serialize(Core::Archive &ar) {
+	string format(1, _stream->_format);
+
 	ar & NAMED_OBJECT_HINT("location", _stream->_loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("seedname", _stream->_cha, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("type", _stream->_type, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("begin_time", _stream->_starttime, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("end_time", _stream->_endtime, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
+
+	if ( _slproto < 4.0 ) {
+		string starttime = _stream->_starttime.toString("%F %T.%4f");
+		string endtime = _stream->_endtime.toString("%F %T.%4f");
+		ar & NAMED_OBJECT_HINT("begin_time", starttime, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("end_time", endtime, Core::Archive::STATIC_TYPE);
+	}
+	else {
+		ar & NAMED_OBJECT_HINT("begin_time", _stream->_starttime, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("end_time", _stream->_endtime, Core::Archive::STATIC_TYPE);
+	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -43,7 +55,7 @@ void StreamInfo::serialize(Core::Archive &ar) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-RingInfo::RingInfo(double slproto, RingPtr ring, const std::string &description, enum InfoLevel level)
+RingInfo::RingInfo(double slproto, RingPtr ring, const string &description, enum InfoLevel level)
 : _slproto(slproto), _ring(ring), _description(description), _level(level) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -54,30 +66,33 @@ RingInfo::RingInfo(double slproto, RingPtr ring, const std::string &description,
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void RingInfo::serialize(Core::Archive &ar) {
 	size_t sep = _ring->_name.find_first_of('.');
-	if ( sep == std::string::npos )  // TODO: assert
+	if ( sep == string::npos )  // TODO: assert
 		return;
 
-	std::string net = _ring->_name.substr(0, sep);
-	std::string sta = _ring->_name.substr(sep + 1);
+	string net = _ring->_name.substr(0, sep);
+	string sta = _ring->_name.substr(sep + 1);
 
 	// TODO: implement uint64_t serialization
 	int begin_seq = _ring->_baseseq;
 	int end_seq = _ring->_endseq;
+
+	string enabled = "enabled";
 
 	ar & NAMED_OBJECT_HINT("name", sta, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("network", net, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("description", _description, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("begin_seq", begin_seq, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("end_seq", end_seq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("stream_check", enabled, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("ordered", _ring->_ordered, Core::Archive::STATIC_TYPE);
 
 	if ( _level >= INFO_STREAMS ) {
-		std::vector<StreamInfoPtr> streamInfo;
-		streamInfo.reserve(_ring->_streams.size());
+		vector<StreamInfoPtr> streams;
+		streams.reserve(_ring->_streams.size());
 		for ( const auto &s : _ring->_streams )
-			streamInfo.push_back(new StreamInfo(_slproto, s.second));
+			streams.push_back(new StreamInfo(_slproto, s.second));
 
-		ar & NAMED_OBJECT_HINT("stream", streamInfo, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("stream", streams, Core::Archive::STATIC_TYPE);
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -86,7 +101,28 @@ void RingInfo::serialize(Core::Archive &ar) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Info::Info(double slproto, const std::string &software, const std::string &organization,
+FormatInfo::FormatInfo(double slproto)
+: _slproto(slproto) {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void FormatInfo::serialize(Core::Archive &ar) {
+	for ( const auto &f : Format::_instances ) {
+		string code(1, f.second->_code);
+		ar & NAMED_OBJECT_HINT(code.c_str(), f.second->_mimetype, Core::Archive::STATIC_TYPE);
+	}
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Info::Info(double slproto, const string &software, const string &organization,
 	   const Core::Time &started, InfoLevel level)
 : _slproto(slproto), _software(software), _organization(organization), _started(started)
 , _level(level) {
@@ -97,8 +133,8 @@ Info::Info(double slproto, const std::string &software, const std::string &organ
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Info::addStation(RingPtr ring, const std::string &description) {
-	_ringInfo.push_back(new RingInfo(_slproto, ring, description, _level));
+void Info::addStation(RingPtr ring, const string &description) {
+	_stations.push_back(new RingInfo(_slproto, ring, description, _level));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -111,8 +147,13 @@ void Info::serialize(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("organization", _organization, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("started", _started, Core::Archive::STATIC_TYPE);
 
+	if ( _level >= INFO_FORMATS && _slproto >= 4.0 ) {
+		FormatInfoPtr formatInfo = new FormatInfo(_slproto);
+		ar & NAMED_OBJECT_HINT("format", formatInfo, Core::Archive::STATIC_TYPE);
+	}
+
 	if ( _level >= INFO_STATIONS )
-		ar & NAMED_OBJECT_HINT("station", _ringInfo, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("station", _stations, Core::Archive::STATIC_TYPE);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -139,7 +180,7 @@ void Error::serialize(Core::Archive &ar) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-InfoError::InfoError(double slproto, const std::string &software, const std::string &organization,
+InfoError::InfoError(double slproto, const string &software, const string &organization,
 		     const Core::Time &started, const string &code, const string &message)
 : Info(slproto, software, organization, started, INFO_ID), _slproto(slproto), _error(code, message) {
 }

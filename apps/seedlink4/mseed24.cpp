@@ -74,7 +74,7 @@ struct ms_datahead
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &p) {
+ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 	ms_datahead* head = (ms_datahead *)buf;
 
 	if ( len < sizeof(ms_datahead) || len < size_t(1 << head->data_record_length) )
@@ -97,29 +97,42 @@ ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &p) {
 	int hour = head->record_start_time.hour;
 	int min = head->record_start_time.min;
 	int sec = head->record_start_time.sec;
-	int usec = ntohs(head->record_start_time.sfrac) * 10000;
+	int usec = ntohs(head->record_start_time.sfrac) * 100;
 
 	Core::Time starttime = Core::Time::FromYearDay(year, yday);
 	starttime.get(&year, &month, &day);
 	starttime.set(year, month, day, hour, min, sec, usec);
 
-	double p1 = (head->sample_rate_factor > 0)?
-		(1.0 / head->sample_rate_factor):
-		-head->sample_rate_factor;
+	Core::Time endtime;
+	const char *type;
 
-	double p2 = (head->sample_rate_multiplier > 0)?
-		(1.0 / head->sample_rate_multiplier):
-	       	-head->sample_rate_multiplier;
+	if ( head->sample_rate_factor && head->sample_rate_multiplier ) {
+		double p1 = ((int16_t)ntohs(head->sample_rate_factor) > 0)?
+			(1.0 / (int16_t)ntohs(head->sample_rate_factor)):
+			-(int16_t)ntohs(head->sample_rate_factor);
 
-	Core::TimeSpan timespan = Core::TimeSpan(head->number_of_samples * p1 * p2);
+		double p2 = ((int16_t)ntohs(head->sample_rate_multiplier) > 0)?
+			(1.0 / (int16_t)ntohs(head->sample_rate_multiplier)):
+			-(int16_t)ntohs(head->sample_rate_multiplier);
+
+		endtime = starttime + Core::TimeSpan(ntohs(head->number_of_samples) * p1 * p2);
+		type = "D";
+	}
+	else {
+		// This includes E, T, C and O types
+		endtime = starttime;
+		type = "L";
+	}
 
 	string payload((char *)buf, (1 << head->data_record_length));
-
-	p = new Record(net, sta, loc, cha, "D", starttime, timespan, FMT_MSEED24, payload);
-
+	rec = new Record(net, sta, loc, cha, type, starttime, endtime, formatCode(), payload);
 	return payload.size();
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+namespace {
+Mseed24Format mseed24format;
+}
 
 }
 }

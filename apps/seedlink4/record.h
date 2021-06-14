@@ -24,6 +24,10 @@ namespace Applications {
 namespace Seedlink {
 
 
+typedef uint64_t Sequence;
+const Sequence SEQ_UNSET = Sequence(-1);
+
+
 typedef uint8_t FormatCode;
 const FormatCode FMT_MSEED24 = '2';
 const FormatCode FMT_MSEED30 = '3';
@@ -40,35 +44,39 @@ class Record : public Core::BaseObject {
 		       const std::string &cha,
 		       const std::string &type,
 		       const Core::Time &starttime,
-		       const Core::TimeSpan &timespan,
+		       const Core::Time &endtime,
 		       FormatCode format,
 		       const std::string &payload)
-		: _net(net), _sta(sta), _loc(loc), _cha(cha), _type(type)
-		, _starttime(starttime), _timespan(timespan)
+		: _seq(SEQ_UNSET), _net(net), _sta(sta), _loc(loc), _cha(cha)
+		, _type(type) , _starttime(starttime), _endtime(endtime)
 		, _format(format), _payload(payload) {}
 
-		std::string networkCode() { return _net; }
-		std::string stationCode() { return _sta; }
-		std::string locationCode() { return _loc; }
-		std::string channelCode() { return _cha; }
-		std::string typeCode() { return _type; }
+		void setSequence(Sequence seq) { _seq = seq; }
+		Sequence sequence() { return _seq; }
+		std::string network() { return _net; }
+		std::string station() { return _sta; }
+		std::string location() { return _loc; }
+		std::string channel() { return _cha; }
+		std::string type() { return _type; }
 		Core::Time startTime() { return _starttime; }
-		Core::TimeSpan timeSpan() { return _timespan; }
+		Core::Time endTime() { return _endtime; }
 		FormatCode format() { return _format; }
+		std::string stream() { return _loc + "." + _cha + "." + _type + "." + std::string(1, _format); }
 		const std::string &payload() { return _payload; }
 		size_t payloadLength() { return _payload.length(); }
 
-		void serializeHeader(Core::Archive &ar);
-		void serializePayload(Core::Archive &ar);
+		void serializeHeader(Archive &ar);
+		void serializePayload(Archive &ar);
 
 	private:
+		Sequence _seq;
 		std::string _net;
 		std::string _sta;
 		std::string _loc;
 		std::string _cha;
 		std::string _type;
 		Core::Time _starttime;
-		Core::TimeSpan _timespan;
+		Core::Time _endtime;
 		int _format;
 		std::string _payload;
 };

@@ -35,7 +35,6 @@ namespace Seedlink {
 class SeedlinkListener : public Wired::Endpoint {
 	public:
 		SeedlinkListener(StoragePtr storage,
-				 const std::map<FormatCode, FormatPtr> &formats,
 				 const ACL &trusted,
 				 const ACL &defaultAccess,
 				 const std::map<std::string, ACL> &access,
@@ -44,7 +43,6 @@ class SeedlinkListener : public Wired::Endpoint {
 
 	private:
 		StoragePtr _storage;
-		std::map<FormatCode, FormatPtr> _formats;
 		ACL _trusted;
 		ACL _defaultAccess;
 		std::map<std::string, ACL> _access;
