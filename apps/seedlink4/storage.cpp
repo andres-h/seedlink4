@@ -215,11 +215,11 @@ void Cursor::dataAvail(Sequence seq) {
 IMPLEMENT_SC_CLASS(Stream, "Seiscomp::Applications::Seedlink::Stream");
 Stream::Stream(const string &loc,
 	       const string &cha,
-	       const string &type,
+	       TypeCode type,
+	       FormatCode format,
 	       const Core::Time &starttime,
-	       const Core::Time &endtime,
-	       FormatCode format)
-: _loc(loc), _cha(cha), _type(type), _starttime(starttime), _endtime(endtime), _format(format) {
+	       const Core::Time &endtime)
+: _loc(loc), _cha(cha), _type(type), _format(format), _starttime(starttime), _endtime(endtime) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -273,15 +273,17 @@ void Stream::setEndTime(const Core::Time &endtime) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Stream::serialize(Core::Archive &ar) {
+	string type(1, _type);
 	string format(1, _format);
 
 	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", _type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("type", type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
 
+	_type = type.c_str()[0];
 	_format = format.c_str()[0];
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -328,26 +330,17 @@ void Ring::serialize(Core::Archive &ar) {
 			streams.push_back(s.second);
 	}
 
-	// TODO: implement uint64_t serialization
-	int baseseq = _baseseq;
-	int startseq = _startseq;
-	int endseq = _endseq;
-
 	ar & NAMED_OBJECT_HINT("nblocks", _nblocks, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("blocksize", _blocksize, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("shift", _shift, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("baseseq", baseseq, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("startseq", startseq, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("endseq", endseq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("baseseq", (int64_t&)_baseseq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("startseq", (int64_t&)_startseq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("endseq", (int64_t&)_endseq, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("streams", streams, Core::Archive::STATIC_TYPE);
 
 	if ( ar.isReading() ) {
 		for ( const auto &s : streams )
 			_streams.insert(pair<string, StreamPtr>(s->id(), s));
-
-		_baseseq = baseseq;
-		_startseq = startseq;
-		_endseq = endseq;
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -489,9 +482,9 @@ bool Ring::load() {
 				StreamPtr s = new Stream(rec->location(),
 							 rec->channel(),
 							 rec->type(),
+							 rec->format(),
 							 rec->startTime(),
-							 rec->endTime(),
-							 rec->format());
+							 rec->endTime());
 
 				_streams.insert(pair<string, StreamPtr>(s->id(), s));
 			}
@@ -649,7 +642,7 @@ bool Ring::put(RecordPtr rec, Sequence seq, bool seq24bit) {
 
 	map<string, StreamPtr>::iterator it = _streams.find(rec->stream());
 	if ( it == _streams.end() ) {
-		StreamPtr s = new Stream(rec->location(), rec->channel(), rec->type(), rec->startTime(), rec->endTime(), rec->format());
+		StreamPtr s = new Stream(rec->location(), rec->channel(), rec->type(), rec->format(), rec->startTime(), rec->endTime());
 		_streams.insert(pair<string, StreamPtr>(s->id(), s));
 	}
 	else {

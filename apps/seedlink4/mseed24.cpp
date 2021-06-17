@@ -104,7 +104,7 @@ ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 	starttime.set(year, month, day, hour, min, sec, usec);
 
 	Core::Time endtime;
-	const char *type;
+	char type;
 
 	if ( head->sample_rate_factor && head->sample_rate_multiplier ) {
 		double p1 = ((int16_t)ntohs(head->sample_rate_factor) > 0)?
@@ -116,16 +116,16 @@ ssize_t Mseed24Format::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 			-(int16_t)ntohs(head->sample_rate_multiplier);
 
 		endtime = starttime + Core::TimeSpan(ntohs(head->number_of_samples) * p1 * p2);
-		type = "D";
+		type = 'D';
 	}
 	else {
 		// This includes E, T, C and O types
 		endtime = starttime;
-		type = "L";
+		type = 'L';
 	}
 
 	string payload((char *)buf, (1 << head->data_record_length));
-	rec = new Record(net, sta, loc, cha, type, starttime, endtime, formatCode(), payload);
+	rec = new Record(net, sta, loc, cha, type, formatCode(), starttime, endtime, payload);
 	return payload.size();
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>

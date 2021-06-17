@@ -96,10 +96,10 @@ class Stream : public Core::BaseObject {
 		Stream(): _format(0) {}
 		Stream(const std::string &loc,
 		       const std::string &cha,
-		       const std::string &type,
+		       TypeCode type,
+		       FormatCode format,
 		       const Core::Time &starttime,
-		       const Core::Time &endtime,
-		       FormatCode format);
+		       const Core::Time &endtime);
 
 		std::string id();
 
@@ -114,10 +114,10 @@ class Stream : public Core::BaseObject {
 	private:
 		std::string _loc;
 		std::string _cha;
-		std::string _type;
+		TypeCode _type;
+		FormatCode _format;
 		Core::Time _starttime;
 		Core::Time _endtime;
-		FormatCode _format;
 };
 
 

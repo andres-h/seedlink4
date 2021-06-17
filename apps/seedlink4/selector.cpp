@@ -123,7 +123,7 @@ bool Selector::init(const string &selstr, bool ext) {
 bool Selector::match(RecordPtr rec) {
 	return (regex_match(rec->location(), _rloc) &&
 		regex_match(rec->channel(), _rcha) &&
-		regex_match(rec->type(), _rtype));
+		regex_match(string(1, rec->type()), _rtype));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

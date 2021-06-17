@@ -24,22 +24,16 @@ namespace Seedlink {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Record::serializeHeader(Core::Archive &ar) {
 	bool valid = true;  // marks the beginning of a valid record
-
-	// TODO: implement uint64_t serialization
-	int seq = _seq;
-
 	ar & NAMED_OBJECT_HINT("valid", valid, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("seq", seq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("seq", (int64_t&)_seq, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("network", _net, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("station", _sta, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", _type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("type", (int8_t&)_type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("format", (int8_t&)_format, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("format", _format, Core::Archive::STATIC_TYPE);
-
-	_seq = seq;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

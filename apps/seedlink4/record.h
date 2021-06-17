@@ -28,7 +28,8 @@ typedef uint64_t Sequence;
 const Sequence SEQ_UNSET = Sequence(-1);
 
 
-typedef uint8_t FormatCode;
+typedef char TypeCode;
+typedef char FormatCode;
 const FormatCode FMT_MSEED24 = '2';
 const FormatCode FMT_MSEED30 = '3';
 
@@ -42,14 +43,14 @@ class Record : public Core::BaseObject {
 		       const std::string &sta,
 		       const std::string &loc,
 		       const std::string &cha,
-		       const std::string &type,
+		       TypeCode type,
+		       FormatCode format,
 		       const Core::Time &starttime,
 		       const Core::Time &endtime,
-		       FormatCode format,
 		       const std::string &payload)
 		: _seq(SEQ_UNSET), _net(net), _sta(sta), _loc(loc), _cha(cha)
-		, _type(type) , _starttime(starttime), _endtime(endtime)
-		, _format(format), _payload(payload) {}
+		, _type(type), _format(format), _starttime(starttime), _endtime(endtime)
+		, _payload(payload) {}
 
 		void setSequence(Sequence seq) { _seq = seq; }
 		Sequence sequence() { return _seq; }
@@ -57,11 +58,11 @@ class Record : public Core::BaseObject {
 		std::string station() { return _sta; }
 		std::string location() { return _loc; }
 		std::string channel() { return _cha; }
-		std::string type() { return _type; }
+		TypeCode type() { return _type; }
+		FormatCode format() { return _format; }
+		std::string stream() { return _loc + "." + _cha + "." + std::string(1, _type) + "." + std::string(1, _format); }
 		Core::Time startTime() { return _starttime; }
 		Core::Time endTime() { return _endtime; }
-		FormatCode format() { return _format; }
-		std::string stream() { return _loc + "." + _cha + "." + _type + "." + std::string(1, _format); }
 		const std::string &payload() { return _payload; }
 		size_t payloadLength() { return _payload.length(); }
 
@@ -74,10 +75,10 @@ class Record : public Core::BaseObject {
 		std::string _sta;
 		std::string _loc;
 		std::string _cha;
-		std::string _type;
+		TypeCode _type;
+		FormatCode _format;
 		Core::Time _starttime;
 		Core::Time _endtime;
-		int _format;
 		std::string _payload;
 };
 

@@ -31,11 +31,12 @@ StreamInfo::StreamInfo(double slproto, StreamPtr stream)
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void StreamInfo::serialize(Core::Archive &ar) {
+	string type(1, _stream->_type);
 	string format(1, _stream->_format);
 
 	ar & NAMED_OBJECT_HINT("location", _stream->_loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("seedname", _stream->_cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", _stream->_type, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("type", type, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
 
 	if ( _slproto < 4.0 ) {
@@ -71,18 +72,13 @@ void RingInfo::serialize(Core::Archive &ar) {
 
 	string net = _ring->_name.substr(0, sep);
 	string sta = _ring->_name.substr(sep + 1);
-
-	// TODO: implement uint64_t serialization
-	int begin_seq = _ring->_baseseq;
-	int end_seq = _ring->_endseq;
-
 	string enabled = "enabled";
 
 	ar & NAMED_OBJECT_HINT("name", sta, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("network", net, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("description", _description, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("begin_seq", begin_seq, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("end_seq", end_seq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("begin_seq", (int64_t&)_ring->_baseseq, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("stream_check", enabled, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("ordered", _ring->_ordered, Core::Archive::STATIC_TYPE);
 
