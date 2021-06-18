@@ -103,6 +103,7 @@ class Stream : public Core::BaseObject {
 		       const Core::Time &endtime);
 
 		std::string id();
+		FormatCode format();
 
 		Core::Time startTime();
 		Core::Time endTime();

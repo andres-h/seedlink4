@@ -20,6 +20,9 @@ namespace Applications {
 namespace Seedlink {
 
 
+#define ARCHIVE_FLAGS Core::Archive::STATIC_TYPE|Core::Archive::XML_MANDATORY
+
+
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 StreamInfo::StreamInfo(double slproto, StreamPtr stream)
 : _slproto(slproto), _stream(stream) {
@@ -34,20 +37,20 @@ void StreamInfo::serialize(Core::Archive &ar) {
 	string type(1, _stream->_type);
 	string format(1, _stream->_format);
 
-	ar & NAMED_OBJECT_HINT("location", _stream->_loc, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("seedname", _stream->_cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", type, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("location", _stream->_loc, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("seedname", _stream->_cha, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("type", type, ARCHIVE_FLAGS);
 
 	if ( _slproto < 4.0 ) {
 		string starttime = _stream->_starttime.toString("%F %T.%4f");
 		string endtime = _stream->_endtime.toString("%F %T.%4f");
-		ar & NAMED_OBJECT_HINT("begin_time", starttime, Core::Archive::STATIC_TYPE);
-		ar & NAMED_OBJECT_HINT("end_time", endtime, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("begin_time", starttime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_time", endtime, ARCHIVE_FLAGS);
 	}
 	else {
-		ar & NAMED_OBJECT_HINT("begin_time", _stream->_starttime, Core::Archive::STATIC_TYPE);
-		ar & NAMED_OBJECT_HINT("end_time", _stream->_endtime, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("format", format, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("begin_time", _stream->_starttime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_time", _stream->_endtime, ARCHIVE_FLAGS);
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -74,35 +77,39 @@ void RingInfo::serialize(Core::Archive &ar) {
 	string sta = _ring->_name.substr(sep + 1);
 	string enabled = "enabled";
 
-	ar & NAMED_OBJECT_HINT("name", sta, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("network", net, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("description", _description, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("stream_check", enabled, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("ordered", _ring->_ordered, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("name", sta, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("network", net, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("description", _description, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("stream_check", enabled, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("ordered", _ring->_ordered, ARCHIVE_FLAGS);
 
 	if ( _slproto < 4.0 ) {
 		string baseseq;
 		baseseq.resize(7);
 		snprintf(&baseseq[0], 7, "%06llX", (long long unsigned int)_ring->_baseseq);
-		ar & NAMED_OBJECT_HINT("begin_seq", baseseq, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("begin_seq", baseseq, ARCHIVE_FLAGS);
 
 		string endseq;
 		endseq.resize(7);
 		snprintf(&endseq[0], 7, "%06llX", (long long unsigned int)_ring->_endseq);
-		ar & NAMED_OBJECT_HINT("end_seq", endseq, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("end_seq", endseq, ARCHIVE_FLAGS);
 	}
 	else {
-		ar & NAMED_OBJECT_HINT("begin_seq", (int64_t&)_ring->_baseseq, Core::Archive::STATIC_TYPE);
-		ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("begin_seq", (int64_t&)_ring->_baseseq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, ARCHIVE_FLAGS);
 	}
 
 	if ( _level >= INFO_STREAMS ) {
 		vector<StreamInfoPtr> streams;
 		streams.reserve(_ring->_streams.size());
-		for ( const auto &s : _ring->_streams )
-			streams.push_back(new StreamInfo(_slproto, s.second));
+		for ( const auto &s : _ring->_streams ) {
+			if ( _slproto < 4.0 && s.second->format() != FMT_MSEED24 )
+				continue;
 
-		ar & NAMED_OBJECT_HINT("stream", streams, Core::Archive::STATIC_TYPE);
+			streams.push_back(new StreamInfo(_slproto, s.second));
+		}
+
+		ar & NAMED_OBJECT_HINT("stream", streams, ARCHIVE_FLAGS);
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -123,7 +130,7 @@ FormatInfo::FormatInfo(double slproto)
 void FormatInfo::serialize(Core::Archive &ar) {
 	for ( const auto &f : Format::_instances ) {
 		string code(1, f.second->_code);
-		ar & NAMED_OBJECT_HINT(code.c_str(), f.second->_mimetype, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT(code.c_str(), f.second->_mimetype, ARCHIVE_FLAGS);
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -153,17 +160,17 @@ void Info::addStation(RingPtr ring, const string &description) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Info::serialize(Core::Archive &ar) {
-	ar & NAMED_OBJECT_HINT("software", _software, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("organization", _organization, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("started", _started, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("software", _software, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("organization", _organization, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("started", _started, ARCHIVE_FLAGS);
 
 	if ( _level >= INFO_FORMATS && _slproto >= 4.0 ) {
 		FormatInfoPtr formatInfo = new FormatInfo(_slproto);
-		ar & NAMED_OBJECT_HINT("format", formatInfo, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("format", formatInfo, ARCHIVE_FLAGS);
 	}
 
 	if ( _level >= INFO_STATIONS )
-		ar & NAMED_OBJECT_HINT("station", _stations, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("station", _stations, ARCHIVE_FLAGS);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -181,8 +188,8 @@ Error::Error(const string &code, const string &message)
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Error::serialize(Core::Archive &ar) {
-	ar & NAMED_OBJECT_HINT("code", _code, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("message", _message, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("code", _code, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("message", _message, ARCHIVE_FLAGS);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -202,7 +209,7 @@ InfoError::InfoError(double slproto, const string &software, const string &organ
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void InfoError::serialize(Core::Archive &ar) {
 	Info::serialize(ar);
-	ar & NAMED_OBJECT_HINT("error", _error, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("error", _error, ARCHIVE_FLAGS);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
