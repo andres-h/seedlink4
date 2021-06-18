@@ -44,7 +44,7 @@ class Cursor : public Core::BaseObject {
 		~Cursor();
 
 		std::string ringName();
-		void setSequence(Sequence seq, bool seq24bit = false);
+		void setSequence(Sequence seq, double slproto);
 		void setDialup(bool dialup);
 		void setStart(Core::Time t);
 		void setEnd(Core::Time t);
@@ -83,7 +83,8 @@ class CursorClient {
 class CursorOwner {
 	public:
 		virtual void removeCursor(Cursor* c) =0;
-		virtual RecordPtr get(Sequence seq, bool seq24bit) =0;
+		virtual RecordPtr get(Sequence seq) =0;
+		virtual Sequence sequence() =0;
 };
 
 
@@ -136,7 +137,8 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		bool load();
 		void save();
 		bool ensure(int nblocks, int blocksize);
-		bool put(RecordPtr buf, Sequence seq, bool seq24bit);
+		bool put(RecordPtr buf, Sequence seq);
+		Sequence sequence();
 		CursorPtr cursor(CursorClient &client);
 
 	private:
@@ -154,7 +156,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		std::set<Cursor*> _cursors;
 
 		void removeCursor(Cursor* c);
-		RecordPtr get(Sequence seq, bool seq24bit);
+		RecordPtr get(Sequence seq);
 };
 
 

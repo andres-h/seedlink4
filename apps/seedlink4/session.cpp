@@ -58,17 +58,16 @@ class Station : public Core::BaseObject {
 	public:
 		void setPattern(const string &p);
 		bool match(const string &s);
-		void setSequence(Sequence seq, bool seq24bit = false);
+		void setSequence(Sequence seq);
 		void setDialup(bool dialup);
 		void setStart(Core::Time t);
 		void setEnd(Core::Time t);
-		bool select(const string &selstr, bool ext);
-		CursorPtr cursor(RingPtr ring, CursorClient &client);
+		bool select(const string &selstr, double slproto);
+		CursorPtr cursor(RingPtr ring, CursorClient &client, double slproto);
 
 	private:
 		regex _regex;
 		Sequence _seq;
-		bool _seq24bit;
 		bool _dialup;
 		Core::Time _starttime;
 		Core::Time _endtime;
@@ -101,9 +100,8 @@ bool Station::match(const string &s) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Station::setSequence(Sequence seq, bool seq24bit) {
+void Station::setSequence(Sequence seq) {
 	_seq = seq;
-	_seq24bit = seq24bit;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -138,14 +136,14 @@ void Station::setEnd(Core::Time t) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Station::select(const string &selstr, bool ext) {
+bool Station::select(const string &selstr, double slproto) {
 	if ( selstr.length() == 0 ) {
 		_selectors.clear();
 		return true;
 	}
 
 	SelectorPtr sel = new Selector();
-	if ( !sel->init(selstr, ext) )
+	if ( !sel->init(selstr, slproto) )
 		return false;
 
 	_selectors.push_back(sel);
@@ -157,9 +155,9 @@ bool Station::select(const string &selstr, bool ext) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-CursorPtr Station::cursor(RingPtr ring, CursorClient &client) {
+CursorPtr Station::cursor(RingPtr ring, CursorClient &client, double slproto) {
 	CursorPtr cursor = ring->cursor(client);
-	cursor->setSequence(_seq, _seq24bit);
+	cursor->setSequence(_seq, slproto);
 	cursor->setStart(_starttime);
 	cursor->setEnd(_endtime);
 	cursor->setDialup(_dialup);
@@ -207,7 +205,6 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		const map<string, ACL> &_access;
 		const map<string, string> &_descriptions;
 		list<FormatCode> _accept;
-		bool _acceptAll;
 		map<string, StationPtr> _stations;
 		list<StationPtr> _wildcardStations;
 		StationPtr _currentStation;
@@ -565,20 +562,20 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 		_type = Client;
 
+		list<FormatCode> accept;
+
 		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if (strncasecmp(tok, "*", tokLen) == 0 ) {
-				_acceptAll = true;
+			if ( tokLen == 1 && ((tok[0] >= '0' && tok[0] <= '9') ||
+					     (tok[0] >= 'A' && tok[0] <= 'Z')) ) {
+				accept.push_back(tok[0]);
 			}
 			else {
-				FormatCode val;
-				if ( !Core::fromString(val, string(tok, tokLen)) ) {
-					sendResponse("ERROR ARGUMENTS invalid format code\r\n");
-					return;
-				}
-
-				_accept.push_back(val);
+				sendResponse("ERROR ARGUMENTS invalid format code\r\n");
+				return;
 			}
 		}
+
+		_accept = accept;
 		sendResponse("OK\r\n");
 		return;
 	}
@@ -655,7 +652,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		_type = Client;
 
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if ( !_currentStation->select(string(tok, tokLen), (_slproto >= 4.0)) ) {
+			if ( !_currentStation->select(string(tok, tokLen), _slproto) ) {
 				if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS\r\n");
 				else if ( !_batch ) sendResponse("ERROR\r\n");
 				return;
@@ -667,7 +664,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 				return;
 			}
 			else {
-				_currentStation->select("", false);
+				_currentStation->select("", _slproto);
 			}
 		}
 
@@ -792,17 +789,12 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 				unsigned long long seq = stoull(string(tok, tokLen), &end, 16);
 
 				if ( end == tokLen && seq < SEQ_UNSET) {
-					if ( _slproto >= 4.0 ) {
-						_currentStation->setSequence(seq, false);
+					if ( _slproto < 4.0 && seq > 0xffffff ) {
+						if ( !_batch ) sendResponse("ERROR\r\n");
+						return;
 					}
-					else {
-						if ( tokLen > 6 ) {
-							if ( !_batch ) sendResponse("ERROR\r\n");
-							return;
-						}
 
-						_currentStation->setSequence(seq, true);
-					}
+					_currentStation->setSequence(seq);
 				}
 				else {
 					if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS invalid sequence number\r\n");
@@ -1152,7 +1144,12 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			}
 		}
 
-		if ( !ring->put(rec, seq, seq24bit) )
+		if ( seq == SEQ_UNSET )
+			seq = ring->sequence();
+		else if ( seq24bit )
+			seq = (ring->sequence() & ~0xffffffULL) | (seq & 0xffffff);
+
+		if ( !ring->put(rec, seq) )
 			SEISCOMP_WARNING("dropped %s.%s.%s.%s seq %0*llX",
 					 rec->network().c_str(),
 					 rec->station().c_str(),
@@ -1213,7 +1210,7 @@ void SeedlinkSession::startTransfer() {
 			}
 		}
 
-		CursorPtr cursor = _currentStation->cursor(ring, *this);
+		CursorPtr cursor = _currentStation->cursor(ring, *this, _slproto);
 		_cursors.insert(pair<string, CursorPtr>(name, cursor));
 		_cursorsAvail.insert(cursor);
 	}
@@ -1232,7 +1229,7 @@ void SeedlinkSession::startTransfer() {
 
 			if ( !ring ) continue;  // future station
 
-			CursorPtr cursor = i.second->cursor(ring, *this);
+			CursorPtr cursor = i.second->cursor(ring, *this, _slproto);
 			_cursors.insert(pair<string, CursorPtr>(i.first, cursor));
 			_cursorsAvail.insert(cursor);
 		}
@@ -1259,7 +1256,7 @@ void SeedlinkSession::startTransfer() {
 				if ( !ring )
 					throw logic_error("station " + name + " not found");
 
-				CursorPtr cursor = i->cursor(ring, *this);
+				CursorPtr cursor = i->cursor(ring, *this, _slproto);
 				_cursors.insert(pair<string, CursorPtr>(name, cursor));
 				_cursorsAvail.insert(cursor);
 			}
@@ -1267,8 +1264,8 @@ void SeedlinkSession::startTransfer() {
 	}
 
 	for ( auto i : _cursors ) {
-		if ( _accept.empty() && !_acceptAll ) {
-			i.second->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
+		if ( _slproto < 4.0 ) {
+			i.second->accept(FMT_MSEED24);
 		}
 		else {
 			for ( auto j : _accept )
@@ -1306,18 +1303,18 @@ void SeedlinkSession::collectData() {
 			RecordPtr rec = (*_cursorIter)->next();
 
 			if ( rec ) {
-				if ( _accept.empty() && !_acceptAll ) {  // legacy mode
+				if ( _slproto < 4.0 ) {
 					if ( rec->format() != FMT_MSEED24 )
 						throw logic_error("unexpected format");
 
-					char seqstr[30];
-					snprintf(seqstr, 30, "%06llX", (unsigned long long)((*_cursorIter)->sequence() - 1) & 0xffffff);
+					char seqstr[7];
+					snprintf(seqstr, 7, "%06llX", (long long unsigned int)(rec->sequence() & 0xffffff));
 					buffer.append("SL");
 					buffer.append(seqstr);
 					buffer.append(rec->payload());
 				}
 				else {
-					Sequence seq = (*_cursorIter)->sequence() - 1;
+					Sequence seq = rec->sequence();
 					uint32_t length = rec->payloadLength() + 8;
 					buffer.append("SE");
 					buffer.push_back(char(rec->format()));
@@ -1412,10 +1409,10 @@ void SeedlinkSession::stationAvail(const string &name) {
 		if ( !ring )
 			throw logic_error("station " + name + " not found");
 
-		CursorPtr cursor = station->cursor(ring, *this);
+		CursorPtr cursor = station->cursor(ring, *this, _slproto);
 
-		if ( _accept.empty() && !_acceptAll ) {
-			cursor->accept(FMT_MSEED24);  // only MS2.4 in legacy mode
+		if ( _slproto < 4.0 ) {
+			cursor->accept(FMT_MSEED24);
 		}
 		else {
 			for ( auto j : _accept )

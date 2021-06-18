@@ -28,8 +28,7 @@ def main():
     ifd.write(b"SLPROTO 4.0\r\n")
     ifd.flush()
     expect(ifd, b"OK")
-    # 50 = ord('2') = FMT_MSEED24
-    ifd.write(b"ACCEPT 50 51\r\n")
+    ifd.write(b"ACCEPT 2\r\n")
     ifd.flush()
     expect(ifd, b"OK")
     ifd.write(b"STATION * GE\r\n")

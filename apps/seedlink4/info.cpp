@@ -77,10 +77,24 @@ void RingInfo::serialize(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("name", sta, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("network", net, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("description", _description, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("begin_seq", (int64_t&)_ring->_baseseq, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("stream_check", enabled, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("ordered", _ring->_ordered, Core::Archive::STATIC_TYPE);
+
+	if ( _slproto < 4.0 ) {
+		string baseseq;
+		baseseq.resize(7);
+		snprintf(&baseseq[0], 7, "%06llX", (long long unsigned int)_ring->_baseseq);
+		ar & NAMED_OBJECT_HINT("begin_seq", baseseq, Core::Archive::STATIC_TYPE);
+
+		string endseq;
+		endseq.resize(7);
+		snprintf(&endseq[0], 7, "%06llX", (long long unsigned int)_ring->_endseq);
+		ar & NAMED_OBJECT_HINT("end_seq", endseq, Core::Archive::STATIC_TYPE);
+	}
+	else {
+		ar & NAMED_OBJECT_HINT("begin_seq", (int64_t&)_ring->_baseseq, Core::Archive::STATIC_TYPE);
+		ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, Core::Archive::STATIC_TYPE);
+	}
 
 	if ( _level >= INFO_STREAMS ) {
 		vector<StreamInfoPtr> streams;

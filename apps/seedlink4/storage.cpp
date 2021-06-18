@@ -64,9 +64,21 @@ string Cursor::ringName() {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Cursor::setSequence(Sequence seq, bool seq24bit) {
-	_seq = seq;
-	_seq24bit = seq24bit;
+void Cursor::setSequence(Sequence seq, double slproto) {
+	if ( seq == SEQ_UNSET ) {
+		_seq = _owner.sequence();
+	}
+	else {
+		if ( slproto < 4.0 ) {  // 24-bit sequence with wrap
+			_seq = (_owner.sequence() & ~0xffffffULL) | (seq & 0xffffff);
+
+			if ( _seq > _owner.sequence() )
+				_seq -= 0x1000000;
+		}
+		else if ( seq > _owner.sequence() ) {
+				_seq = _owner.sequence();
+		}
+	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -151,7 +163,7 @@ bool Cursor::match(RecordPtr rec) {
 RecordPtr Cursor::next() {
 	RecordPtr rec;
 
-	while ( (rec = _owner.get(_seq, _seq24bit)) != NULL ) {
+	while ( (rec = _owner.get(_seq)) != NULL ) {
 		_seq = rec->sequence() + 1;
 
 		if ( _starttime == Core::Time::Null || rec->endTime() >= _starttime ) {
@@ -168,6 +180,8 @@ RecordPtr Cursor::next() {
 			return rec;
 		}
 	}
+
+	_seq = _owner.sequence();
 
 	if ( _dialup && _has_data ) {
 		_eod = true;
@@ -571,13 +585,8 @@ bool Ring::ensure(int nblocks, int blocksize) {
 
 
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-bool Ring::put(RecordPtr rec, Sequence seq, bool seq24bit) {
+bool Ring::put(RecordPtr rec, Sequence seq) {
 	const string datafile = _path + "/ring.dat";
-
-	if ( seq == SEQ_UNSET )
-		seq = _endseq;
-	else if ( seq24bit )
-		seq = (_endseq & ~0xffffffULL) | (seq & 0xffffff);
 
 	if ( seq < _baseseq )
 		return false;
@@ -672,27 +681,7 @@ bool Ring::put(RecordPtr rec, Sequence seq, bool seq24bit) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-RecordPtr Ring::get(Sequence seq, bool seq24bit) {
-	if ( !_endseq )
-		return NULL;
-
-	if ( seq == SEQ_UNSET ) {
-		seq = _endseq;
-	}
-	else {
-		if ( seq24bit ) {
-			seq = (_endseq & ~0xffffffULL) | (seq & 0xffffff);
-
-			if ( seq > _endseq )
-				seq -= 0x1000000;
-		}
-		else {
-			if ( seq > _endseq )
-				//return NULL;
-				seq = _endseq - 1;
-		}
-	}
-
+RecordPtr Ring::get(Sequence seq) {
 	if ( seq < _startseq )
 		seq = _startseq;
 
@@ -719,6 +708,15 @@ RecordPtr Ring::get(Sequence seq, bool seq24bit) {
 	}
 
 	return NULL;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Sequence Ring::sequence() {
+	return _endseq;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -756,7 +754,7 @@ Storage::Storage(const string &path)
 			RingPtr ring = new Ring(_path, name);
 
 			if ( !ring->load() ) {
-				SEISCOMP_WARNING(("invalid ring at " + _path + "/" + name).c_str());
+				SEISCOMP_WARNING("invalid ring at %s/%s", _path.c_str(), name.c_str());
 				continue;
 			}
 

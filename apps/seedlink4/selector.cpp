@@ -23,13 +23,13 @@ namespace Seedlink {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::initPattern(regex &r, const string &src, bool ext) {
+bool Selector::initPattern(regex &r, const string &src, double slproto) {
 	if ( src.length() == 0 ) {
 		r = regex(".*");
 		return true;
 	}
 
-	if (ext) {
+	if (slproto >= 4.0) {
 		if ( !regex_match(src, regex("[A-Z0-9\\-\\?\\*]*")) )
 			return false;
 	}
@@ -41,7 +41,7 @@ bool Selector::initPattern(regex &r, const string &src, bool ext) {
 	string s = regex_replace(src, regex("-"), " ");
 	s = regex_replace(s, regex("\\?"), ".");
 
-	if ( ext )
+	if ( slproto >= 4.0 )
 		s = regex_replace(s, regex("\\*"), ".*");
 
 	r = regex(s);
@@ -53,10 +53,11 @@ bool Selector::initPattern(regex &r, const string &src, bool ext) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::init(const string &selstr, bool ext) {
+bool Selector::init(const string &selstr, double slproto) {
 	string loc = "";
 	string cha = "";
 	string type = "";
+	string fmt = "";
 	string s;
 
 	if (selstr[0] == '!') {
@@ -70,26 +71,32 @@ bool Selector::init(const string &selstr, bool ext) {
 
 	size_t p = s.find_first_of('.');
 
-	if ( ext ) {
+	if ( slproto >= 4.0 ) {
 		if ( p == string::npos )
 			return false;
 
 		loc = s.substr(0, p);
 		s = s.substr(p + 1);
-
 		p = s.find_first_of('.');
 
 		if ( p != string::npos ) {
 			cha = s.substr(0, p);
-			type = s.substr(p + 1);
+			s = s.substr(p + 1);
+			p = s.find_first_of('.');
+
+			if ( p != string::npos ) {
+				type = s.substr(0, p);
+				fmt = s.substr(p + 1);
+			}
+			else {
+				type = s;
+			}
 		}
 		else {
 			cha = s;
 		}
 	}
 	else {
-		// legacy format
-
 		if ( p != string::npos ) {
 			type = s.substr(p + 1);
 			s = s.substr(0, p);
@@ -110,9 +117,10 @@ bool Selector::init(const string &selstr, bool ext) {
 		}
 	}
 
-	return (initPattern(_rloc, loc, ext) &&
-		initPattern(_rcha, cha, ext) &&
-		initPattern(_rtype, type, ext) );
+	return (initPattern(_rloc, loc, slproto) &&
+		initPattern(_rcha, cha, slproto) &&
+		initPattern(_rtype, type, slproto) &&
+		initPattern(_rfmt, fmt, slproto));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -123,7 +131,8 @@ bool Selector::init(const string &selstr, bool ext) {
 bool Selector::match(RecordPtr rec) {
 	return (regex_match(rec->location(), _rloc) &&
 		regex_match(rec->channel(), _rcha) &&
-		regex_match(string(1, rec->type()), _rtype));
+		regex_match(string(1, rec->type()), _rtype) &&
+		regex_match(string(1, rec->format()), _rfmt));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
