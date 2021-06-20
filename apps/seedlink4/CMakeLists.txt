@@ -8,7 +8,7 @@ SET(
 		app.cpp
 		format.cpp
 		info.cpp
-		mseed24.cpp
+		mseed.cpp
 		record.cpp
 		selector.cpp
 		server.cpp
@@ -18,7 +18,7 @@ SET(
 )
 
 
-INCLUDE_DIRECTORIES(${LIBMSEED_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(../../libs/3rd-party/libmseed3)
 SC_INSTALL_INIT(${APP_NAME} ../../../common/apps/templates/initd.py)
 
 FILE(GLOB descs "${CMAKE_CURRENT_SOURCE_DIR}/descriptions/*.xml")
@@ -30,4 +30,4 @@ INSTALL(FILES ${cfgs} DESTINATION ${SC3_PACKAGE_CONFIG_DIR})
 SC_ADD_EXECUTABLE(${PACKAGE_NAME} ${APP_NAME})
 SC_ADD_VERSION(${PACKAGE_NAME} ${APP_NAME})
 SC_LINK_LIBRARIES_INTERNAL(${APP_NAME} client)
-TARGET_LINK_LIBRARIES(${APP_NAME} mseed)
+TARGET_LINK_LIBRARIES(${APP_NAME} mseed3)

@@ -10,7 +10,8 @@
  * https://www.gnu.org/licenses/agpl-3.0.html.                             *
  ***************************************************************************/
 
-#include <time.h>
+#include <cstdio>
+#include <ctime>
 #include <exception>
 #include <cerrno>
 
@@ -1007,21 +1008,24 @@ void SeedlinkSession::sendMSXML(InfoPtr info, const char *chan) {
 			throw runtime_error("failed to serialize info");
 	}
 
-	MSRecord* msr = msr_init(NULL);
+	MS3Record* msr = msr3_init(NULL);
+
+	// FIXME: should accept const arguments
+	if ( ms_nslc2sid(msr->sid, LM_SIDLEN, 0, (char *)"", (char *)"", (char *)"", (char *)chan) < 0 )
+		throw logic_error("could not create source identifier");
+
+	msr->formatversion = 2;
 	msr->reclen = 512;
-	strncpy(msr->channel, chan, 11);
-	msr->dataquality = 'D';
-	msr->starttime = MS_EPOCH2HPTIME(time(NULL));
+	msr->starttime = MS_EPOCH2NSTIME(time(NULL));
 	msr->samprate = 0;
 	msr->encoding = DE_ASCII;
-	msr->byteorder = 1;
 	msr->datasamples = (void *)data.data();
 	msr->numsamples = data.size();
 	msr->sampletype = 'a';
 
 	int64_t packedsamples = 0;
 
-	msr_pack(msr, [](char *record, int reclen, void *handlerdata) {
+	msr3_pack(msr, [](char *record, int reclen, void *handlerdata) {
 		SeedlinkSession* obj = reinterpret_cast<SeedlinkSession *>(handlerdata);
 		obj->send("SLINFO *", 8);
 		obj->send(record, reclen);
@@ -1031,15 +1035,15 @@ void SeedlinkSession::sendMSXML(InfoPtr info, const char *chan) {
 		msr->datasamples = (void *)(data.data() + (size_t)packedsamples);
 		msr->numsamples = data.size() - (size_t)packedsamples;
 
-		msr_pack(msr, [](char *record, int reclen, void *handlerdata) {
+		msr3_pack(msr, [](char *record, int reclen, void *handlerdata) {
 			SeedlinkSession* obj = reinterpret_cast<SeedlinkSession *>(handlerdata);
 			obj->send("SLINFO  ", 8);
 			obj->send(record, reclen);
-		}, this, NULL, true, false);
+		}, this, NULL, MSF_FLUSHDATA, false);
 	}
 
 	msr->datasamples = NULL;
-	msr_free(&msr);
+	msr3_free(&msr);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

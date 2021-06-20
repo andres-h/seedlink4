@@ -19,11 +19,13 @@ namespace Seiscomp {
 namespace Applications {
 namespace Seedlink {
 
-class Mseed24Format : public Format {
+class MseedFormat : public Format {
 	public:
-		Mseed24Format(): Format(FMT_MSEED24, "application/vnd.fdsn.mseed") {}
-
+		MseedFormat(FormatCode code, const std::string &mimetype, uint8_t version);
 		ssize_t readRecord(const void *buf, size_t len, RecordPtr &rec);
+
+	private:
+		uint8_t _version;
 };
 
 }

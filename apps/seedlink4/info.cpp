@@ -162,7 +162,7 @@ void Info::addStation(RingPtr ring, const string &description) {
 void Info::serialize(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("software", _software, ARCHIVE_FLAGS);
 	ar & NAMED_OBJECT_HINT("organization", _organization, ARCHIVE_FLAGS);
-	ar & NAMED_OBJECT_HINT("started", _started, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("started", _started, Core::Archive::STATIC_TYPE);
 
 	if ( _level >= INFO_FORMATS && _slproto >= 4.0 ) {
 		FormatInfoPtr formatInfo = new FormatInfo(_slproto);

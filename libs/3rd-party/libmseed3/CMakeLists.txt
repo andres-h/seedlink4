@@ -1,0 +1,20 @@
+ADD_LIBRARY(mseed3 STATIC
+	crc32c.c
+	extraheaders.c
+	fileutils.c
+	genutils.c
+	gmtime64.c
+	gswap.c
+	logging.c
+	lookup.c
+	msio.c
+	msrutils.c
+	pack.c
+	packdata.c
+	parseutils.c
+	parson.c
+	selection.c
+	tracelist.c
+	unpack.c
+	unpackdata.c
+)

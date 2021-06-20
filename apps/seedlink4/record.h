@@ -63,8 +63,9 @@ class Record : public Core::BaseObject {
 		std::string stream() { return _loc + "." + _cha + "." + std::string(1, _type) + "." + std::string(1, _format); }
 		Core::Time startTime() { return _starttime; }
 		Core::Time endTime() { return _endtime; }
-		const std::string &payload() { return _payload; }
+		size_t headerLength() { return _net.length() + _sta.length() + _loc.length() + _cha.length() + 47; }
 		size_t payloadLength() { return _payload.length(); }
+		const std::string &payload() { return _payload; }
 
 		void serializeHeader(Archive &ar);
 		void serializePayload(Archive &ar);

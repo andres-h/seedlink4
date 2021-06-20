@@ -22,8 +22,6 @@
 #include "settings.h"
 #include "session.h"
 #include "storage.h"
-#include "format.h"
-#include "mseed24.h"
 
 
 using namespace std;

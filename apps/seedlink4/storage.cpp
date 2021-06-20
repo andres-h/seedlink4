@@ -597,8 +597,19 @@ bool Ring::ensure(int nblocks, int blocksize) {
 bool Ring::put(RecordPtr rec, Sequence seq) {
 	const string datafile = _path + "/ring.dat";
 
-	if ( seq < _baseseq )
+	if ( seq < _baseseq ) {
+		SEISCOMP_ERROR("record sequece number is too low (%lu < %lu)",
+			       seq,
+			       _baseseq);
 		return false;
+	}
+
+	if ( rec->headerLength() + rec->payloadLength() > (size_t)_blocksize ) {
+		SEISCOMP_ERROR("record is larger than blocksize (%lu > %lu)",
+			       rec->headerLength() + rec->payloadLength(),
+			       (size_t)_blocksize);
+		return false;
+	}
 
 	if ( seq >= _baseseq + 2 * _nblocks ) {
 		for ( int i = 0; i < _nblocks; ++i ) {
@@ -608,6 +619,7 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 
 		_shift = _nblocks - 1;
 		_baseseq = seq - _nblocks + 1;
+		_streams.clear();
 	}
 	else {
 		while ( seq >= _baseseq + _nblocks ) {
@@ -665,12 +677,7 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 	}
 	else {
 		StreamPtr s = it->second;
-
-		if ( rec->startTime() < s->startTime() )
-			s->setStartTime(rec->startTime());
-
-		if ( rec->endTime() > s->endTime() )
-			s->setEndTime(rec->endTime());
+		s->setEndTime(rec->endTime());
 	}
 
 	if ( _startseq > seq )
