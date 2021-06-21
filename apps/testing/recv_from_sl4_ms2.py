@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import socket
+import struct
 
 def expect(fd, s):
     line = fd.readline(100).rstrip()
@@ -10,13 +11,16 @@ def expect(fd, s):
 
 def copydata(ifd, ofd):
     while True:
-        data = ifd.read(528)  # assume 512b mseed and 16b header
+        sig = ifd.read(4)
 
-        if data[:2] != b"SE":
+        if sig != b"SE2\0":
             print("invalid signature")
             break
 
-        ofd.write(data[16:])
+        len = struct.unpack("<L", ifd.read(4))[0]
+        ifd.read(8)  # throw away sequence number
+        msrec = ifd.read(len - 8)
+        ofd.write(msrec)
         ofd.flush()
 
 def main():
@@ -40,7 +44,7 @@ def main():
     ifd.write(b"END\r\n")
     ifd.flush()
 
-    ofd = open("output.mseed", "wb")
+    ofd = open("output.ms2", "wb")
 
     copydata(ifd, ofd)
 
