@@ -20,13 +20,13 @@ def copydata(ifd, ofd):
         msrec = ifd.read(512)
 
         ofd.write(b"SE2\0")  # signature, format code and reserved byte
-        ofd.write(struct.pack("<L", 520)) # length of following data
+        ofd.write(struct.pack("<L", 512)) # length of payload
         ofd.write(struct.pack("<q", -1))  # undefined seq
         ofd.write(msrec)
 
         ms3rec = subprocess.run("./ms2to3", input=msrec, stdout=subprocess.PIPE).stdout
         ofd.write(b"SE3\0")  # signature, format code and reserved byte
-        ofd.write(struct.pack("<L", len(ms3rec) + 8)) # length of following data
+        ofd.write(struct.pack("<L", len(ms3rec))) # length of payload
         ofd.write(struct.pack("<q", -1))  # undefined seq
         ofd.write(ms3rec)
 

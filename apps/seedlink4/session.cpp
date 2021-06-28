@@ -51,7 +51,7 @@ namespace Seedlink {
 		     TODO("AUTH:TOKEN ") \
 		     "TIME "
 
-#define SOFTWARE "SeedLink v4.0 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0 CAP GETCAP"
+#define SOFTWARE "SeedLink v4.0 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0"
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 DEFINE_SMARTPOINTER(Station);
@@ -205,7 +205,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		const ACL &_defaultAccess;
 		const map<string, ACL> &_access;
 		const map<string, string> &_descriptions;
-		list<FormatCode> _accept;
+		set<FormatCode> _accept;
 		map<string, StationPtr> _stations;
 		list<StationPtr> _wildcardStations;
 		StationPtr _currentStation;
@@ -449,12 +449,12 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 		double val;
 		if ( !Core::fromString(val, string(tok, tokLen)) || val <= 0.0 || val > 4.0) {
-			sendResponse("ERROR ARGUMENTS invalid protocol version\r\n");
+			sendResponse("ERROR UNSUPPORTED unsupported protocol version\r\n");
 			return;
 		}
 
 		if ( _slproto != 0.0 ) {
-			sendResponse("ERROR UNSUPPORTED multiple protocol switches\r\n");
+			sendResponse("ERROR UNEXPECTED multiple protocol switches\r\n");
 			return;
 		}
 
@@ -491,13 +491,6 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		return;
 	}
 
-	if ( tokLen == 12 && strncasecmp(tok, "CAPABILITIES", tokLen) == 0 ) {
-		// just for compatibility
-		if ( _slproto >= 4.0 ) sendResponse("ERROR UNSUPPORTED");
-		else if ( !_batch ) sendResponse("OK\r\n");
-		return;
-	}
-
 	if ( tokLen == 4 && strncasecmp(tok, "AUTH", tokLen) == 0 ) {
 		if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
 			if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS missing auth method\r\n");
@@ -527,7 +520,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			return;
 		}
 
-		if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS unsupported auth method\r\n");
+		if ( _slproto >= 4.0 ) sendResponse("ERROR UNSUPPORTED unsupported auth method\r\n");
 		else if ( !_batch ) sendResponse("ERROR\r\n");
 		return;
 	}
@@ -535,7 +528,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	// Non-standard (implementation specific) command to switch to feed mode.
 	if ( tokLen == 4 && strncasecmp(tok, "FEED", tokLen) == 0 ) {
 		if ( _type != Unspecific ) {
-			if ( _slproto >= 4.0 ) sendResponse("ERROR UNSUPPORTED using FEED in client mode\r\n");
+			if ( _slproto >= 4.0 ) sendResponse("ERROR UNEXPECTED using FEED in client mode\r\n");
 			else sendResponse("ERROR\r\n");
 			return;
 		}
@@ -563,12 +556,12 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 
 		_type = Client;
 
-		list<FormatCode> accept;
+		set<FormatCode> accept;
 
 		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
 			if ( tokLen == 1 && ((tok[0] >= '0' && tok[0] <= '9') ||
 					     (tok[0] >= 'A' && tok[0] <= 'Z')) ) {
-				accept.push_back(tok[0]);
+				accept.insert(tok[0]);
 			}
 			else {
 				sendResponse("ERROR ARGUMENTS invalid format code\r\n");
@@ -576,7 +569,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			}
 		}
 
-		_accept = accept;
+		_accept.insert(accept.begin(), accept.end());
 		sendResponse("OK\r\n");
 		return;
 	}
@@ -748,7 +741,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		return;
 	}
 
-	sendResponse("ERROR\r\n");
+	sendResponse("ERROR UNSUPPORTED\r\n");
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -1063,15 +1056,15 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			break;
 
 		FormatCode formatCode;
-		uint32_t packetLength;
 		uint32_t headerLength;
+		uint32_t payloadLength;
 		Sequence seq;
 		bool seq24bit;
 
 		if ( data[0] == 'S' && data[1] == 'L' ) {  // legacy format
 			formatCode = FMT_MSEED24;
-			packetLength = 520;
 			headerLength = 8;
+			payloadLength = 512;
 			seq = SEQ_UNSET;
 			seq24bit = true;
 
@@ -1093,9 +1086,9 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		}
 		else if ( data[0] == 'S' && data[1] == 'E' ) {
 			formatCode = (FormatCode)data[2];
-			packetLength = *(uint32_t *)(data + 4) + 8; // TODO: byteorder
 			headerLength = 16;
-			seq = *(Sequence *)(data + 8);              // TODO: byteorder
+			payloadLength = *(uint32_t *)(data + 4);  // TODO: byteorder
+			seq = *(Sequence *)(data + 8);            // TODO: byteorder
 			seq24bit = false;
 		}
 		else {
@@ -1104,7 +1097,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			return;
 		}
 
-		if ( len < packetLength )  // not enough data
+		if ( len < headerLength + payloadLength )  // not enough data
 			break;
 
 		Format* format = Format::get(formatCode);
@@ -1115,10 +1108,10 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		}
 
 		RecordPtr rec;
-		if ( format->readRecord(data + headerLength, packetLength - headerLength, rec) <= 0 ) {
-			SEISCOMP_ERROR("invalid data");
-			data += packetLength;
-			len -= packetLength;
+		if ( format->readRecord(data + headerLength, payloadLength, rec) <= 0 ) {
+			SEISCOMP_ERROR("invalid record");
+			data += headerLength + payloadLength;
+			len -= headerLength + payloadLength;
 			continue;
 		}
 
@@ -1162,8 +1155,8 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 					 seq24bit? 6: 16,
 					 (unsigned long long)seq);
 
-		data += packetLength;
-		len -= packetLength;
+		data += headerLength + payloadLength;
+		len -= headerLength + payloadLength;
 	}
 
 	_buffer = string(data, len);
@@ -1319,12 +1312,12 @@ void SeedlinkSession::collectData() {
 				}
 				else {
 					Sequence seq = rec->sequence();
-					uint32_t length = rec->payloadLength() + 8;
+					uint32_t payloadLength = rec->payloadLength();
 					buffer.append("SE");
 					buffer.push_back(char(rec->format()));
 					buffer.push_back(char(0));
-					buffer.append((char *)&length, 4); // TODO: byteorder
-					buffer.append((char *)&seq, 8);    // TODO: byteorder
+					buffer.append((char *)&payloadLength, 4);  // TODO: byteorder
+					buffer.append((char *)&seq, 8);            // TODO: byteorder
 					buffer.append(rec->payload());
 				}
 			}

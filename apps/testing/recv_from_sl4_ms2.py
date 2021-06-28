@@ -18,8 +18,8 @@ def copydata(ifd, ofd):
             break
 
         len = struct.unpack("<L", ifd.read(4))[0]
-        ifd.read(8)  # throw away sequence number
-        msrec = ifd.read(len - 8)
+        ifd.read(8)  # discard sequence number
+        msrec = ifd.read(len)
         ofd.write(msrec)
         ofd.flush()
 

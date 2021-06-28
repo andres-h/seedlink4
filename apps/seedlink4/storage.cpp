@@ -686,8 +686,10 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 	if ( _endseq < seq + 1 )
 		_endseq = seq + 1;
 
-	for ( auto i : _cursors )
-		i->dataAvail(seq);
+	// dataAvail() may delete the current item
+	set<Cursor*>::iterator i = _cursors.begin();
+	while ( i != _cursors.end() )
+		(*i++)->dataAvail(seq);
 
 	return true;
 }
