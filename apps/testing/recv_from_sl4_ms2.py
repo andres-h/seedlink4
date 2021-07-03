@@ -13,7 +13,7 @@ def copydata(ifd, ofd):
     while True:
         sig = ifd.read(4)
 
-        if sig != b"SE2\0":
+        if sig[:2] != b"SE":
             print("invalid signature")
             break
 
@@ -32,7 +32,7 @@ def main():
     ifd.write(b"SLPROTO 4.0\r\n")
     ifd.flush()
     expect(ifd, b"OK")
-    ifd.write(b"ACCEPT 2\r\n")
+    ifd.write(b"ACCEPT 2 E C T L O\r\n")
     ifd.flush()
     expect(ifd, b"OK")
     ifd.write(b"STATION * GE\r\n")

@@ -28,11 +28,16 @@ typedef uint64_t Sequence;
 const Sequence SEQ_UNSET = Sequence(-1);
 
 
-typedef char TypeCode;
 typedef char FormatCode;
 const FormatCode FMT_MSEED24 = '2';
 const FormatCode FMT_MSEED30 = '3';
 
+// v3 types
+const FormatCode FMT_MSEED24_EVENT       = 'E';
+const FormatCode FMT_MSEED24_CALIBRATION = 'C';
+const FormatCode FMT_MSEED24_TIMING      = 'T';
+const FormatCode FMT_MSEED24_OPAQUE      = 'O';
+const FormatCode FMT_MSEED24_LOG         = 'L';
 
 DEFINE_SMARTPOINTER(Record);
 class Record : public Core::BaseObject {
@@ -43,13 +48,12 @@ class Record : public Core::BaseObject {
 		       const std::string &sta,
 		       const std::string &loc,
 		       const std::string &cha,
-		       TypeCode type,
 		       FormatCode format,
 		       const Core::Time &starttime,
 		       const Core::Time &endtime,
 		       const std::string &payload)
 		: _seq(SEQ_UNSET), _net(net), _sta(sta), _loc(loc), _cha(cha)
-		, _type(type), _format(format), _starttime(starttime), _endtime(endtime)
+		, _format(format), _starttime(starttime), _endtime(endtime)
 		, _payload(payload) {}
 
 		void setSequence(Sequence seq) { _seq = seq; }
@@ -58,9 +62,8 @@ class Record : public Core::BaseObject {
 		std::string station() { return _sta; }
 		std::string location() { return _loc; }
 		std::string channel() { return _cha; }
-		TypeCode type() { return _type; }
 		FormatCode format() { return _format; }
-		std::string stream() { return _loc + "." + _cha + "." + std::string(1, _type) + "." + std::string(1, _format); }
+		std::string stream() { return _loc + "." + _cha + "." + std::string(1, _format); }
 		Core::Time startTime() { return _starttime; }
 		Core::Time endTime() { return _endtime; }
 		size_t headerLength() { return _net.length() + _sta.length() + _loc.length() + _cha.length() + 47; }
@@ -76,7 +79,6 @@ class Record : public Core::BaseObject {
 		std::string _sta;
 		std::string _loc;
 		std::string _cha;
-		TypeCode _type;
 		FormatCode _format;
 		Core::Time _starttime;
 		Core::Time _endtime;

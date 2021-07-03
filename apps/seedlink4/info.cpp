@@ -34,20 +34,49 @@ StreamInfo::StreamInfo(double slproto, StreamPtr stream)
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void StreamInfo::serialize(Core::Archive &ar) {
-	string type(1, _stream->_type);
-	string format(1, _stream->_format);
-
 	ar & NAMED_OBJECT_HINT("location", _stream->_loc, ARCHIVE_FLAGS);
 	ar & NAMED_OBJECT_HINT("seedname", _stream->_cha, ARCHIVE_FLAGS);
-	ar & NAMED_OBJECT_HINT("type", type, ARCHIVE_FLAGS);
 
 	if ( _slproto < 4.0 ) {
+		string type;
+
+		switch ( _stream->_format ) {
+			case FMT_MSEED24:
+				type = "D";
+				break;
+
+			case FMT_MSEED24_EVENT:
+				type = "E";
+				break;
+
+			case FMT_MSEED24_CALIBRATION:
+				type = "C";
+				break;
+
+			case FMT_MSEED24_TIMING:
+				type = "T";
+				break;
+
+			case FMT_MSEED24_OPAQUE:
+				type = "O";
+				break;
+
+			case FMT_MSEED24_LOG:
+				type = "L";
+				break;
+
+			default:
+				throw logic_error("unexpected format");
+		}
+
+		ar & NAMED_OBJECT_HINT("type", type, ARCHIVE_FLAGS);
 		string starttime = _stream->_starttime.toString("%F %T.%4f");
 		string endtime = _stream->_endtime.toString("%F %T.%4f");
 		ar & NAMED_OBJECT_HINT("begin_time", starttime, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("end_time", endtime, ARCHIVE_FLAGS);
 	}
 	else {
+		string format(1, _stream->_format);
 		ar & NAMED_OBJECT_HINT("format", format, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("begin_time", _stream->_starttime, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("end_time", _stream->_endtime, ARCHIVE_FLAGS);
@@ -103,10 +132,14 @@ void RingInfo::serialize(Core::Archive &ar) {
 		vector<StreamInfoPtr> streams;
 		streams.reserve(_ring->_streams.size());
 		for ( const auto &s : _ring->_streams ) {
-			if ( _slproto < 4.0 && s.second->format() != FMT_MSEED24 )
-				continue;
-
-			streams.push_back(new StreamInfo(_slproto, s.second));
+			if ( _slproto >= 4.0 ||
+			     s.second->format() == FMT_MSEED24 ||
+			     s.second->format() == FMT_MSEED24_EVENT ||
+			     s.second->format() == FMT_MSEED24_CALIBRATION ||
+			     s.second->format() == FMT_MSEED24_TIMING ||
+			     s.second->format() == FMT_MSEED24_OPAQUE ||
+			     s.second->format() == FMT_MSEED24_LOG )
+				streams.push_back(new StreamInfo(_slproto, s.second));
 		}
 
 		ar & NAMED_OBJECT_HINT("stream", streams, ARCHIVE_FLAGS);

@@ -1263,6 +1263,11 @@ void SeedlinkSession::startTransfer() {
 	for ( auto i : _cursors ) {
 		if ( _slproto < 4.0 ) {
 			i.second->accept(FMT_MSEED24);
+			i.second->accept(FMT_MSEED24_EVENT);
+			i.second->accept(FMT_MSEED24_CALIBRATION);
+			i.second->accept(FMT_MSEED24_TIMING);
+			i.second->accept(FMT_MSEED24_OPAQUE);
+			i.second->accept(FMT_MSEED24_LOG);
 		}
 		else {
 			for ( auto j : _accept )
@@ -1301,7 +1306,12 @@ void SeedlinkSession::collectData() {
 
 			if ( rec ) {
 				if ( _slproto < 4.0 ) {
-					if ( rec->format() != FMT_MSEED24 )
+					if ( rec->format() != FMT_MSEED24 &&
+					     rec->format() != FMT_MSEED24_EVENT &&
+					     rec->format() != FMT_MSEED24_CALIBRATION &&
+					     rec->format() != FMT_MSEED24_TIMING &&
+					     rec->format() != FMT_MSEED24_OPAQUE &&
+					     rec->format() != FMT_MSEED24_LOG )
 						throw logic_error("unexpected format");
 
 					char seqstr[7];
@@ -1410,6 +1420,12 @@ void SeedlinkSession::stationAvail(const string &name) {
 
 		if ( _slproto < 4.0 ) {
 			cursor->accept(FMT_MSEED24);
+			cursor->accept(FMT_MSEED24);
+			cursor->accept(FMT_MSEED24_EVENT);
+			cursor->accept(FMT_MSEED24_CALIBRATION);
+			cursor->accept(FMT_MSEED24_TIMING);
+			cursor->accept(FMT_MSEED24_OPAQUE);
+			cursor->accept(FMT_MSEED24_LOG);
 		}
 		else {
 			for ( auto j : _accept )

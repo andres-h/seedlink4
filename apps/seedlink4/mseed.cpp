@@ -75,24 +75,6 @@ ssize_t MseedFormat::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 		return -1;
 	}
 
-	char type = 'D';
-
-	if ( mseh_exists(msr, "FDSN.Event.Detection" ) ) {
-		type = 'E';
-	}
-	else if ( mseh_exists(msr, "FDSN.Calibration.Sequence" ) ) {
-		type = 'C';
-	}
-	else if ( mseh_exists(msr, "FDSN.Time.Exception" ) ) {
-		type = 'T';
-	}
-	else if ( msr->samprate == 0.0 ) {
-		if ( msr->samplecnt != 0 )
-			type = 'L';  // log
-		else
-			type = 'O';  // opaque
-	}
-	
 	long sec = msr->starttime / NSTMODULUS;
 	long usec = (msr->starttime % NSTMODULUS) / 1000;
 
@@ -106,13 +88,18 @@ ssize_t MseedFormat::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 
 	msr3_free(&msr);
 
-	rec = new Record(net, sta, loc, cha, type, formatCode(), starttime, endtime, payload);
+	rec = new Record(net, sta, loc, cha, formatCode(), starttime, endtime, payload);
 	return payload.size();
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 namespace {
 MseedFormat mseed24(FMT_MSEED24, "application/vnd.fdsn.mseed", 2);
+MseedFormat mseed24e(FMT_MSEED24_EVENT, "application/vnd.fdsn.mseed+event", 2);
+MseedFormat mseed24c(FMT_MSEED24_CALIBRATION, "application/vnd.fdsn.mseed+calibration", 2);
+MseedFormat mseed24t(FMT_MSEED24_TIMING, "application/vnd.fdsn.mseed+timing", 2);
+MseedFormat mseed24o(FMT_MSEED24_OPAQUE, "application/vnd.fdsn.mseed+opaque", 2);
+MseedFormat mseed24l(FMT_MSEED24_LOG, "application/vnd.fdsn.mseed+log", 2);
 MseedFormat mseed30(FMT_MSEED30, "application/vnd.fdsn.mseed3", 3);
 }
 

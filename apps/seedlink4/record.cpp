@@ -30,7 +30,6 @@ void Record::serializeHeader(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("station", _sta, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", (int8_t&)_type, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("format", (int8_t&)_format, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);

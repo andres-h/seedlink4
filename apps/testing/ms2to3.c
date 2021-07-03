@@ -11,7 +11,7 @@ static void record_handler(char *record, int reclen, void *handlerdata) {
 
 int main() {
 	int err;
-	MS3Record *msr = 0;
+	MS3Record *msr = NULL;
 
 	ms_loginit (print_stderr, NULL, print_stderr, NULL);
 
@@ -23,7 +23,7 @@ int main() {
 	}
 
 	if ( err < 0 ) {
-		printf("%s\n", ms_errorstr(err));
+		fprintf(stderr, "%s\n", ms_errorstr(err));
 		return 1;
 	}
 

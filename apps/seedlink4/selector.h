@@ -37,7 +37,6 @@ class Selector : public Core::BaseObject {
 		bool _neg;
 		std::regex _rloc;
 		std::regex _rcha;
-		std::regex _rtype;
 		std::regex _rfmt;
 
 		bool initPattern(std::regex &r, const std::string &s, double slproto);

@@ -56,7 +56,6 @@ bool Selector::initPattern(regex &r, const string &src, double slproto) {
 bool Selector::init(const string &selstr, double slproto) {
 	string loc = "";
 	string cha = "";
-	string type = "";
 	string fmt = "";
 	string s;
 
@@ -81,24 +80,20 @@ bool Selector::init(const string &selstr, double slproto) {
 
 		if ( p != string::npos ) {
 			cha = s.substr(0, p);
-			s = s.substr(p + 1);
-			p = s.find_first_of('.');
-
-			if ( p != string::npos ) {
-				type = s.substr(0, p);
-				fmt = s.substr(p + 1);
-			}
-			else {
-				type = s;
-			}
+			fmt = s.substr(p + 1);
 		}
 		else {
 			cha = s;
 		}
 	}
 	else {
+		char type = 0;
+
 		if ( p != string::npos ) {
-			type = s.substr(p + 1);
+			if ( s.length() != p + 2 )
+				return false;
+
+			type = s[p + 1];
 			s = s.substr(0, p);
 		}
 
@@ -110,16 +105,47 @@ bool Selector::init(const string &selstr, double slproto) {
 			cha = s;
 		}
 		else if ( s.length() == 1 && selstr.length() == 1) {
-			type = s;
+			type = s[0];
 		}
 		else if ( s.length() != 0 ) {
 			return false;
+		}
+
+		switch ( type ) {
+			case 'D':
+				fmt = string(1, FMT_MSEED24);
+				break;
+
+			case 'E':
+				fmt = string(1, FMT_MSEED24_EVENT);
+				break;
+
+			case 'C':
+				fmt = string(1, FMT_MSEED24_CALIBRATION);
+				break;
+
+			case 'T':
+				fmt = string(1, FMT_MSEED24_TIMING);
+				break;
+
+			case 'O':
+				fmt = string(1, FMT_MSEED24_OPAQUE);
+				break;
+
+			case 'L':
+				fmt = string(1, FMT_MSEED24_LOG);
+				break;
+
+			case 0:
+				break;
+
+			default:
+				return false;
 		}
 	}
 
 	return (initPattern(_rloc, loc, slproto) &&
 		initPattern(_rcha, cha, slproto) &&
-		initPattern(_rtype, type, slproto) &&
 		initPattern(_rfmt, fmt, slproto));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -131,7 +157,6 @@ bool Selector::init(const string &selstr, double slproto) {
 bool Selector::match(RecordPtr rec) {
 	return (regex_match(rec->location(), _rloc) &&
 		regex_match(rec->channel(), _rcha) &&
-		regex_match(string(1, rec->type()), _rtype) &&
 		regex_match(string(1, rec->format()), _rfmt));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

@@ -229,11 +229,10 @@ void Cursor::dataAvail(Sequence seq) {
 IMPLEMENT_SC_CLASS(Stream, "Seiscomp::Applications::Seedlink::Stream");
 Stream::Stream(const string &loc,
 	       const string &cha,
-	       TypeCode type,
 	       FormatCode format,
 	       const Core::Time &starttime,
 	       const Core::Time &endtime)
-: _loc(loc), _cha(cha), _type(type), _format(format), _starttime(starttime), _endtime(endtime) {
+: _loc(loc), _cha(cha), _format(format), _starttime(starttime), _endtime(endtime) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -242,7 +241,7 @@ Stream::Stream(const string &loc,
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 string Stream::id() {
-	return _loc + "." + _cha + "." + _type + "." + string(1, _format);
+	return _loc + "." + _cha + "." + string(1, _format);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -296,17 +295,14 @@ void Stream::setEndTime(const Core::Time &endtime) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Stream::serialize(Core::Archive &ar) {
-	string type(1, _type);
 	string format(1, _format);
 
 	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("type", type, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);
 
-	_type = type.c_str()[0];
 	_format = format.c_str()[0];
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -504,7 +500,6 @@ bool Ring::load() {
 			if ( it == _streams.end() ) {
 				StreamPtr s = new Stream(rec->location(),
 							 rec->channel(),
-							 rec->type(),
 							 rec->format(),
 							 rec->startTime(),
 							 rec->endTime());
@@ -672,7 +667,7 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 
 	map<string, StreamPtr>::iterator it = _streams.find(rec->stream());
 	if ( it == _streams.end() ) {
-		StreamPtr s = new Stream(rec->location(), rec->channel(), rec->type(), rec->format(), rec->startTime(), rec->endTime());
+		StreamPtr s = new Stream(rec->location(), rec->channel(), rec->format(), rec->startTime(), rec->endTime());
 		_streams.insert(pair<string, StreamPtr>(s->id(), s));
 	}
 	else {

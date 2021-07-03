@@ -19,7 +19,12 @@ def copydata(ifd, ofd):
         ifd.read(6)  # throw away sequence number
         msrec = ifd.read(512)
 
-        ofd.write(b"SE2\0")  # signature, format code and reserved byte
+        fcode = subprocess.run("./classifier", input=msrec, stdout=subprocess.PIPE).stdout
+
+        if len(fcode) != 1:
+            continue
+
+        ofd.write(b"SE%s\0" % fcode)  # signature, format code and reserved byte
         ofd.write(struct.pack("<L", 512)) # length of payload
         ofd.write(struct.pack("<q", -1))  # undefined seq
         ofd.write(msrec)
