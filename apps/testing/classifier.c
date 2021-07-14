@@ -11,7 +11,7 @@ int main() {
 
 	ms_loginit (print_stderr, NULL, print_stderr, NULL);
 
-	if ( (err = ms3_readmsr (&msr, "/dev/stdin", NULL, NULL, MSF_UNPACKDATA, 0)) < 0 ) {
+	if ( (err = ms3_readmsr (&msr, "/dev/stdin", NULL, NULL, 0, 0)) < 0 ) {
 		fprintf(stderr, "%s\n", ms_errorstr(err));
 		return 1;
 	}
@@ -21,12 +21,8 @@ int main() {
 	if ( msr->formatversion == 2 ) {
 		format = '2';
 
-		if ( msr->samprate == 0.0 ) {
-			if ( msr->samplecnt != 0 ) {
-				if ( msr->sampletype == 'a' )
-					format = 'L';  // log
-			}
-			else if ( mseh_exists(msr, "FDSN.Event.Detection" ) ) {
+		if ( msr->samplecnt == 0 ) {
+			if ( mseh_exists(msr, "FDSN.Event.Detection" ) ) {
 				format = 'E';
 			}
 			else if ( mseh_exists(msr, "FDSN.Calibration.Sequence" ) ) {
@@ -38,6 +34,9 @@ int main() {
 			else {
 				format = 'O';  // opaque
 			}
+		}
+		else if ( msr->samprate == 0.0 && msr->sampletype == 'a' ) {
+			format = 'L';  // log
 		}
 	}
 	else if ( msr->formatversion == 3 ) {
