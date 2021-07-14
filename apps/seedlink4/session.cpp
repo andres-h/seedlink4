@@ -973,7 +973,7 @@ void SeedlinkSession::sendJSON(InfoPtr info) {
 
 	string header;
 	header.reserve(16);
-	uint32_t length = data.size() + 8;
+	uint32_t length = data.size();
 	header.append("SEI\0", 4);
 	header.append((char *)&length, 4); // TODO: byteorder
 	header.append("\0\0\0\0\0\0\0\0", 8);
@@ -1356,7 +1356,7 @@ void SeedlinkSession::collectData() {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::outboxFlushed() {
-	if ( _transfer )
+	if ( _transfer && !_cursors.empty() )
 		collectData();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -1419,7 +1419,6 @@ void SeedlinkSession::stationAvail(const string &name) {
 		CursorPtr cursor = station->cursor(ring, *this, _slproto);
 
 		if ( _slproto < 4.0 ) {
-			cursor->accept(FMT_MSEED24);
 			cursor->accept(FMT_MSEED24);
 			cursor->accept(FMT_MSEED24_EVENT);
 			cursor->accept(FMT_MSEED24_CALIBRATION);
