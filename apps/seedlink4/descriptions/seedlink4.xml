@@ -46,6 +46,7 @@
 				<description>
 				Defines the location of storage.
 				</description>
+			</parameter>
 			<parameter name="segments" type="int" default="10">
 				<description>
 				The ringbuffer is currenly segment-based. This parameter defines the
