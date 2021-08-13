@@ -29,8 +29,8 @@ namespace Seedlink {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-MseedFormat::MseedFormat(FormatCode code, const std::string &mimetype, uint8_t version)
-: Format(code, mimetype), _version(version){
+MseedFormat::MseedFormat(const string &code, const string &mimetype, const string &description, uint8_t version)
+: Format(code, mimetype, description), _version(version){
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -49,9 +49,9 @@ ssize_t MseedFormat::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 	}
 
 	if ( msr->formatversion != _version ) {
-		SEISCOMP_ERROR("MiniSEED version (%d) does not match format code (%c)",
+		SEISCOMP_ERROR("MiniSEED version (%d) does not match format code (%s)",
 			       msr->formatversion,
-			       formatCode());
+			       formatCode().c_str());
 		return -1;
 	}
 
@@ -65,12 +65,41 @@ ssize_t MseedFormat::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 		SEISCOMP_WARNING("record is shorter than expected (%lu < %lu)",
 				 (size_t)msr->reclen, len);
 
-	char net[LM_SIDLEN];
-	char sta[LM_SIDLEN];
-	char loc[LM_SIDLEN];
-	char cha[LM_SIDLEN];
+	string station, stream;
 
-	if ( ms_sid2nslc(msr->sid, net, sta, loc, cha) < 0 ) {
+	if ( !strncmp(msr->sid, "FDSN:", 5) ) {
+		char* psta = strchr(&msr->sid[5], '_');
+		if ( psta == NULL ) {
+			SEISCOMP_ERROR("invalid FDSN source identifier: %.*s", LM_SIDLEN, msr->sid);
+			return -1;
+		}
+
+		char* pstream = strchr(psta + 1, '_');
+		if ( pstream == NULL ) {
+			SEISCOMP_ERROR("invalid FDSN source identifier: %.*s", LM_SIDLEN, msr->sid);
+			return -1;
+		}
+
+		station = string(&msr->sid[5], pstream);
+		stream = string(pstream + 1);
+	}
+	else if ( !strncmp(msr->sid, "XFDSN:", 6) ) {
+		char* psta = strchr(&msr->sid[6], '_');
+		if ( psta == NULL ) {
+			SEISCOMP_ERROR("invalid XFDSN source identifier: %.*s", LM_SIDLEN, msr->sid);
+			return -1;
+		}
+
+		char* pstream = strchr(psta + 1, '_');
+		if ( pstream == NULL ) {
+			SEISCOMP_ERROR("invalid XFDSN source identifier: %.*s", LM_SIDLEN, msr->sid);
+			return -1;
+		}
+
+		station = string(&msr->sid[6], pstream);
+		stream = string(pstream + 1);
+	}
+	else {
 		SEISCOMP_ERROR("unsupported source identifier: %.*s", LM_SIDLEN, msr->sid);
 		return -1;
 	}
@@ -88,19 +117,19 @@ ssize_t MseedFormat::readRecord(const void *buf, size_t len, RecordPtr &rec) {
 
 	msr3_free(&msr);
 
-	rec = new Record(net, sta, loc, cha, formatCode(), starttime, endtime, payload);
+	rec = new Record(station, stream, formatCode(), starttime, endtime, payload);
 	return payload.size();
 }
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 namespace {
-MseedFormat mseed24(FMT_MSEED24, "application/vnd.fdsn.mseed", 2);
-MseedFormat mseed24e(FMT_MSEED24_EVENT, "application/vnd.fdsn.mseed+event", 2);
-MseedFormat mseed24c(FMT_MSEED24_CALIBRATION, "application/vnd.fdsn.mseed+calibration", 2);
-MseedFormat mseed24t(FMT_MSEED24_TIMING, "application/vnd.fdsn.mseed+timing", 2);
-MseedFormat mseed24o(FMT_MSEED24_OPAQUE, "application/vnd.fdsn.mseed+opaque", 2);
-MseedFormat mseed24l(FMT_MSEED24_LOG, "application/vnd.fdsn.mseed+log", 2);
-MseedFormat mseed30(FMT_MSEED30, "application/vnd.fdsn.mseed3", 3);
+MseedFormat mseed2d("2D", "application/vnd.fdsn.mseed", "data/generic", 2);
+MseedFormat mseed2e("2E", "application/vnd.fdsn.mseed", "event", 2);
+MseedFormat mseed2c("2C", "application/vnd.fdsn.mseed", "calibration", 2);
+MseedFormat mseed2t("2T", "application/vnd.fdsn.mseed", "timing", 2);
+MseedFormat mseed2o("2O", "application/vnd.fdsn.mseed", "opaque", 2);
+MseedFormat mseed2l("2L", "application/vnd.fdsn.mseed", "log", 2);
+MseedFormat mseed3("3D", "application/vnd.fdsn.mseed3", "data/generic", 3);
 }
 
 }

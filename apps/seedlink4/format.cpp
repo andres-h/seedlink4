@@ -22,13 +22,20 @@ namespace Applications {
 namespace Seedlink {
 
 
-std::map<FormatCode, Format*> Format::_instances;
+std::map<char, std::map<char, Format*> > Format::_instances;
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Format::Format(FormatCode code, const std::string &mimetype)
-: _code(code), _mimetype(mimetype) {
-	_instances.insert(pair<FormatCode, Format*>(code, this));
+Format::Format(const string &code, const string &mimetype, const string &description)
+: _code(code), _mimetype(mimetype), _description(description) {
+	if ( code.length() != 2 )
+		throw logic_error("invalid format code");
+
+	std::map<char, std::map<char, Format*> >::iterator i = _instances.find(code[0]);
+	if( i == _instances.end() )
+		i = _instances.insert(pair<char, std::map<char, Format*> >(code[0], std::map<char, Format*>())).first;
+
+	i->second.insert(pair<char, Format*>(code[1], this));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -36,13 +43,19 @@ Format::Format(FormatCode code, const std::string &mimetype)
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Format* Format::get(FormatCode code) {
-	auto it = _instances.find(code);
+Format* Format::get(const string &code) {
+	if ( code.length() != 2 )
+		throw logic_error("invalid format code");
 
-	if ( it == _instances.end() )
+	auto i = _instances.find(code[0]);
+	if ( i == _instances.end() )
 		return NULL;
 
-	return it->second;
+	auto j = i->second.find(code[1]);
+	if ( j == i->second.end() )
+		return NULL;
+
+	return j->second;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

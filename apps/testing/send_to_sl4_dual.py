@@ -24,15 +24,17 @@ def copydata(ifd, ofd):
         if len(fcode) != 1:
             continue
 
-        ofd.write(b"SE%s\0" % fcode)  # signature, format code and reserved byte
+        ofd.write(b"SE2%s" % fcode)  # signature, format code and subformat code
         ofd.write(struct.pack("<L", 512)) # length of payload
         ofd.write(struct.pack("<q", -1))  # undefined seq
+        ofd.write(b"\0")  # undefined station ID
         ofd.write(msrec)
 
         ms3rec = subprocess.run("./ms2to3", input=msrec, stdout=subprocess.PIPE).stdout
-        ofd.write(b"SE3\0")  # signature, format code and reserved byte
+        ofd.write(b"SE3D")  # signature, format code and subformat code
         ofd.write(struct.pack("<L", len(ms3rec))) # length of payload
         ofd.write(struct.pack("<q", -1))  # undefined seq
+        ofd.write(b"\0")  # undefined station ID
         ofd.write(ms3rec)
 
         ofd.flush()

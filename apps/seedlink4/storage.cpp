@@ -125,22 +125,7 @@ void Cursor::select(SelectorPtr sel) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Cursor::accept(FormatCode format) {
-	if ( format == 0 )
-		_formats.clear();
-	else
-		_formats.insert(format);
-}
-// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
-
-
-
-// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Cursor::match(RecordPtr rec) {
-	if ( _formats.size() != 0 && _formats.find(rec->format()) == _formats.end() )
-		return false;
-
 	bool default_rule = true, result = false;
 	for ( auto i : _selectors ) {
 		if ( i->negative() ) {
@@ -227,12 +212,11 @@ void Cursor::dataAvail(Sequence seq) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 IMPLEMENT_SC_CLASS(Stream, "Seiscomp::Applications::Seedlink::Stream");
-Stream::Stream(const string &loc,
-	       const string &cha,
-	       FormatCode format,
+Stream::Stream(const string &name,
+	       const string &format,
 	       const Core::Time &starttime,
 	       const Core::Time &endtime)
-: _loc(loc), _cha(cha), _format(format), _starttime(starttime), _endtime(endtime) {
+: _name(name), _format(format), _starttime(starttime), _endtime(endtime) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -241,7 +225,7 @@ Stream::Stream(const string &loc,
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 string Stream::id() {
-	return _loc + "." + _cha + "." + string(1, _format);
+	return _name + "." + _format;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -249,7 +233,7 @@ string Stream::id() {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-FormatCode Stream::format() {
+string Stream::format() {
 	return _format;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -295,15 +279,10 @@ void Stream::setEndTime(const Core::Time &endtime) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Stream::serialize(Core::Archive &ar) {
-	string format(1, _format);
-
-	ar & NAMED_OBJECT_HINT("location", _loc, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("channel", _cha, Core::Archive::STATIC_TYPE);
-	ar & NAMED_OBJECT_HINT("format", format, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("name", _name, Core::Archive::STATIC_TYPE);
+	ar & NAMED_OBJECT_HINT("format", _format, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("startTime", _starttime, Core::Archive::STATIC_TYPE);
 	ar & NAMED_OBJECT_HINT("endTime", _endtime, Core::Archive::STATIC_TYPE);
-
-	_format = format.c_str()[0];
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -313,7 +292,7 @@ void Stream::serialize(Core::Archive &ar) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Ring::Ring(const string &path, const string &name, int nblocks, int blocksize)
 : _path(path + "/" + name), _name(name), _nblocks(nblocks), _blocksize(blocksize)
-, _shift(0), _baseseq(0), _startseq(SEQ_UNSET), _endseq(0), _ordered(false) {
+, _shift(0), _baseseq(0), _startseq(SEQ_UNSET), _endseq(0), _backfill(-1) {
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -331,8 +310,8 @@ Ring::~Ring() {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Ring::setOrdered(bool ordered) {
-	_ordered = ordered;
+void Ring::setBackfill(int backfill) {
+	_backfill = backfill;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -496,10 +475,9 @@ bool Ring::load() {
 				}
 			}
 
-			map<string, StreamPtr>::iterator it = _streams.find(rec->stream());
+			map<string, StreamPtr>::iterator it = _streams.find(rec->stream() + "." + rec->format());
 			if ( it == _streams.end() ) {
-				StreamPtr s = new Stream(rec->location(),
-							 rec->channel(),
+				StreamPtr s = new Stream(rec->stream(),
 							 rec->format(),
 							 rec->startTime(),
 							 rec->endTime());
@@ -636,7 +614,7 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 				_sb->pubseekoff(_shift * _blocksize, ios_base::beg);
 				_sb->sputc(0);
 
-				map<string, StreamPtr>::iterator it = _streams.find(rec->stream());
+				map<string, StreamPtr>::iterator it = _streams.find(rec->stream() + "." + rec->format());
 				if ( it != _streams.end() ) {
 					StreamPtr s = it->second;
 					s->setStartTime(rec->endTime());
@@ -665,9 +643,9 @@ bool Ring::put(RecordPtr rec, Sequence seq) {
 
 	ar.close();
 
-	map<string, StreamPtr>::iterator it = _streams.find(rec->stream());
+	map<string, StreamPtr>::iterator it = _streams.find(rec->stream() + "." + rec->format());
 	if ( it == _streams.end() ) {
-		StreamPtr s = new Stream(rec->location(), rec->channel(), rec->format(), rec->startTime(), rec->endTime());
+		StreamPtr s = new Stream(rec->stream(), rec->format(), rec->startTime(), rec->endTime());
 		_streams.insert(pair<string, StreamPtr>(s->id(), s));
 	}
 	else {

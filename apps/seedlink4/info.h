@@ -15,6 +15,7 @@
 
 #include <string>
 #include <vector>
+#include <regex>
 
 #include <seiscomp/core/baseobject.h>
 #include <seiscomp/core/io.h>
@@ -52,7 +53,8 @@ class StreamInfo : public Core::BaseObject {
 DEFINE_SMARTPOINTER(RingInfo);
 class RingInfo : public Core::BaseObject {
 	public:
-		RingInfo(double slproto, RingPtr ring, const std::string &description, InfoLevel level);
+		RingInfo(double slproto, RingPtr ring, const std::string &description,
+			 const std::regex &streamRegex, InfoLevel level);
 
 		void serialize(Core::Archive &ar);
 
@@ -60,14 +62,41 @@ class RingInfo : public Core::BaseObject {
 		double _slproto;
 		RingPtr _ring;
 		std::string _description;
+		std::regex _streamRegex;
 		InfoLevel _level;
+};
+
+
+DEFINE_SMARTPOINTER(SubformatInfo);
+class SubformatInfo : public Core::BaseObject {
+	public:
+		SubformatInfo(double slproto, const std::map<char, Format*> &subformats);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+		std::map<char, Format*> _subformats;
 };
 
 
 DEFINE_SMARTPOINTER(FormatInfo);
 class FormatInfo : public Core::BaseObject {
 	public:
-		FormatInfo(double slproto);
+		FormatInfo(double slproto, const std::map<char, Format*> &subformats);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+		std::map<char, Format*> _subformats;
+};
+
+
+DEFINE_SMARTPOINTER(FormatsInfo);
+class FormatsInfo : public Core::BaseObject {
+	public:
+		FormatsInfo(double slproto);
 
 		void serialize(Core::Archive &ar);
 
@@ -82,7 +111,7 @@ class Info : public Core::BaseObject {
 		Info(double slproto, const std::string &software, const std::string &organization,
 		     const Core::Time &started, InfoLevel level);
 
-		void addStation(RingPtr ring, const std::string &description);
+		void addStation(RingPtr ring, const std::string &description, const std::regex &streamRegex);
 		void serialize(Core::Archive &ar);
 
 	private:

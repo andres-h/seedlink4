@@ -205,7 +205,6 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		const ACL &_defaultAccess;
 		const map<string, ACL> &_access;
 		const map<string, string> &_descriptions;
-		set<FormatCode> _accept;
 		map<string, StationPtr> _stations;
 		list<StationPtr> _wildcardStations;
 		StationPtr _currentStation;
@@ -227,7 +226,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		Core::Time parseTime(const char *data, size_t len);
 		void infoError(const string &code, const string &message);
 		void handleInfo(InfoLevel level, const string &net, const string &sta);
-		void sendJSON(InfoPtr info);
+		void sendJSON(InfoPtr info, const char *code);
 		void sendMSXML(InfoPtr info, const char *chan);
 		void handleFeed(const char *data, size_t len);
 		void sendResponse(const char *data);
@@ -405,32 +404,39 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			return;
 		}
 
-		string net = "*";
-		string sta = "*";
+		string stationPattern = "*";
+		string streamPattern = "*";
 
-		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			sta = string(tok, tokLen);
-
-			if ( !regex_match(sta, regex("[A-Z0-9\\-\\?\\*]*")) ) {
-				infoError("ARGUMENTS", "invalid station pattern");
-				return;
-			}
-
+		if ( _slproto >= 4.0 ) {
 			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-				net = string(tok, tokLen);
+				stationPattern = string(tok, tokLen);
 
-				if ( !regex_match(net, regex("[A-Z0-9\\-\\?\\*]*")) ) {
-					infoError("ARGUMENTS", "invalid network pattern");
+				if ( !regex_match(stationPattern, regex("[A-Z0-9\\?\\*]*")) ) {
+					infoError("ARGUMENTS", "invalid station pattern");
 					return;
+				}
+
+				if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+					streamPattern = string(tok, tokLen);
+
+					if ( !regex_match(streamPattern, regex("[A-Z0-9\\?\\*\\.]*")) ) {
+						infoError("ARGUMENTS", "invalid stream pattern");
+						return;
+					}
 				}
 			}
 		}
 
-		handleInfo(level, net, sta);
+		handleInfo(level, stationPattern, streamPattern);
 		return;
 	}
 
-	// Only INFO is allowed in data transfer phase.
+	if ( tokLen == 3 && strncasecmp(tok, "BYE", tokLen) == 0 ) {
+		close();
+		return;
+	}
+
+	// Only INFO and BYE are allowed in data transfer phase.
 	// This implementation just ignores any other commands.
 	if ( _transfer ) return;
 
@@ -548,83 +554,57 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		return;
 	}
 
-	if ( tokLen == 6 && strncasecmp(tok, "ACCEPT", tokLen) == 0 ) {
-		if ( _slproto < 4.0 ) {
-			sendResponse("ERROR\r\n");
-			return;
-		}
-
-		_type = Client;
-
-		set<FormatCode> accept;
-
-		while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if ( tokLen == 1 && ((tok[0] >= '0' && tok[0] <= '9') ||
-					     (tok[0] >= 'A' && tok[0] <= 'Z')) ) {
-				accept.insert(tok[0]);
-			}
-			else {
-				sendResponse("ERROR ARGUMENTS invalid format code\r\n");
-				return;
-			}
-		}
-
-		_accept.insert(accept.begin(), accept.end());
-		sendResponse("OK\r\n");
-		return;
-	}
-
 	if ( tokLen == 7 && strncasecmp(tok, "STATION", tokLen) == 0 ) {
 		_type = Client;
 
 		// This avoids SELECT, DATA, etc., affecting previous station if the command fails
 		_currentStation = new Station();
 
-		string net = "*";
-		string sta = "*";
+		string name;
 
-		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			sta = string(tok, tokLen);
+		if ( _slproto < 4.0 ) {
+			string net = "*";
+			string sta = "*";
 
-			if ( _slproto >= 4.0 ) {
-				if ( !regex_match(sta, regex("[A-Z0-9\\-\\?\\*]*")) ) {
-					sendResponse("ERROR ARGUMENTS invalid station pattern");
-					return;
-				}
-			}
-			else {
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+				sta = string(tok, tokLen);
+
 				if ( !regex_match(sta, regex("[A-Z0-9]*")) ) {
 					if ( !_batch ) sendResponse("ERROR\r\n");
 					return;
 				}
-			}
 
-			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-				net = string(tok, tokLen);
+				if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+					net = string(tok, tokLen);
 
-				if ( _slproto >= 4.0 ) {
-					if ( !regex_match(net, regex("[A-Z0-9\\-\\?\\*]*")) ) {
-						sendResponse("ERROR ARGUMENTS invalid network pattern");
-						return;
-					}
-				}
-				else {
 					if ( !regex_match(net, regex("[A-Z0-9]*")) ) {
 						if ( !_batch ) sendResponse("ERROR\r\n");
 						return;
 					}
 				}
+				else {
+					net = global.defaultNetwork;
+				}
 			}
-			else if ( _slproto < 4 ) {
-				net = global.defaultNetwork;
+			else {
+				if ( !_batch ) sendResponse("ERROR\r\n");
+				return;
 			}
-		}
-		else if ( _slproto < 4 ) {
-			if ( !_batch ) sendResponse("ERROR\r\n");
-			return;
-		}
 
-		string name = net + "." + sta;
+			name = net + "_" + sta;
+		}
+		else {
+			name = "*";
+
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+				name = string(tok, tokLen);
+
+				if ( !regex_match(name, regex("[A-Z0-9_\\?\\*]*")) ) {
+					sendResponse("ERROR ARGUMENTS invalid pattern");
+					return;
+				}
+			}
+		}
 
 		if ( name.find('?') != string::npos || name.find('*') != string::npos ) {
 			// TODO: limit number of wildcard stations
@@ -645,20 +625,25 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	if ( tokLen == 6 && strncasecmp(tok, "SELECT", tokLen) == 0 ) {
 		_type = Client;
 
-		if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
-			if ( !_currentStation->select(string(tok, tokLen), _slproto) ) {
-				if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS\r\n");
-				else if ( !_batch ) sendResponse("ERROR\r\n");
-				return;
-			}
-		}
-		else {
-			if ( _slproto >= 4.0 ) {
-				sendResponse("ERROR ARGUMENTS empty SELECT is not allowed in v4\r\n");
-				return;
+		if ( _slproto < 4.0 ) {
+			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+				if ( !_currentStation->select(string(tok, tokLen), _slproto) ) {
+					if ( !_batch ) sendResponse("ERROR\r\n");
+					return;
+				}
 			}
 			else {
 				_currentStation->select("", _slproto);
+			}
+
+			if ( !_batch ) sendResponse("OK\r\n");
+		}
+		else {
+			while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
+				if ( !_currentStation->select(string(tok, tokLen), _slproto) ) {
+					sendResponse("ERROR ARGUMENTS\r\n");
+					return;
+				}
 			}
 		}
 
@@ -722,7 +707,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			if ( !checkAccess(name, _ipaddress, _user) )
 				continue;
 
-			size_t sep = name.find_first_of('.');
+			size_t sep = name.find('_');
 			if ( sep != string::npos ) {
 				string net = name.substr(0, sep);
 				string sta = name.substr(sep + 1);
@@ -733,11 +718,6 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		}
 
 		sendResponse("END");
-		return;
-	}
-
-	if ( tokLen == 3 && strncasecmp(tok, "BYE", tokLen) == 0 ) {
-		close();
 		return;
 	}
 
@@ -780,20 +760,28 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 
 			try {
 				size_t end;
-				unsigned long long seq = stoull(string(tok, tokLen), &end, 16);
 
-				if ( end == tokLen && seq < SEQ_UNSET) {
-					if ( _slproto < 4.0 && seq > 0xffffff ) {
+				if ( _slproto < 4.0 ) {
+					unsigned long long seq = stoull(string(tok, tokLen), &end, 16);
+
+					if ( end == tokLen && seq <= 0xffffff ) {
+						_currentStation->setSequence(seq);
+					}
+					else {
 						if ( !_batch ) sendResponse("ERROR\r\n");
 						return;
 					}
-
-					_currentStation->setSequence(seq);
 				}
 				else {
-					if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS invalid sequence number\r\n");
-					else if ( !_batch ) sendResponse("ERROR\r\n");
-					return;
+					unsigned long long seq = stoull(string(tok, tokLen), &end, 10);
+
+					if ( end == tokLen && seq < SEQ_UNSET) {
+						_currentStation->setSequence(seq);
+					}
+					else {
+						sendResponse("ERROR ARGUMENTS invalid sequence number\r\n");
+						return;
+					}
 				}
 			}
 			catch ( const invalid_argument& ) {
@@ -869,32 +857,7 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
-	vector<unsigned int> t;
-	const char *tok;
-	size_t tokLen;
-
-	while ( (tok = Core::tokenize(data, ",", len, tokLen)) != NULL && t.size() < 8 ) {
-		try {
-			size_t end;
-			unsigned long val = stoul(string(tok, tokLen), &end, 10);
-
-			if ( end != tokLen)
-				return Core::Time::Null;
-
-			t.push_back(val);
-		}
-		catch (invalid_argument&) {
-			return Core::Time::Null;
-		}
-	}
-
-	if ( t.size() == 6 )
-		t.push_back(0);
-
-	if ( t.size() != 7 )
-		return Core::Time::Null;
-
-	return Core::Time(t[0], t[1], t[2], t[3], t[4], t[5], t[6] / 1000);
+	return Core::Time::FromString(string(data, 0, len).c_str(), "%FT%T.%fZ");
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -902,17 +865,31 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const string &sta) {
+void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, const string &streamPattern) {
 	InfoPtr info = new Info(_slproto, SOFTWARE, global.organization, Core::Time(), level);
 
 	if ( level >= INFO_STATIONS ) {
-		string s = regex_replace(net + "\\." + sta, regex("\\?"), ".");
-		s = regex_replace(s, regex("\\*"), ".*");
-		regex r = regex(s);
+		regex stationRegex;
+		regex streamRegex;
+
+		if ( _slproto >= 4.0 ) {
+			stationRegex = regex(regex_replace(regex_replace(stationPattern,
+									 regex("\\?"), "."),
+							   regex("\\*"), ".*"));
+
+			streamRegex = regex(regex_replace(regex_replace(regex_replace(stationPattern,
+										      regex("\\."), "\\."),
+									regex("\\?"), "."),
+							  regex("\\*"), ".*"));
+		}
+		else {
+			stationRegex = regex("[^_]+_[^_]+");
+			streamRegex = regex("[^_]*_._._.\\.2.");
+		}
 
 		for ( const auto &name : _storage->cat() ) {
-			if ( !checkAccess(name, _ipaddress, _user) ||
-					!regex_match(name, r) )
+			if ( !regex_match(name, stationRegex) ||
+			     !checkAccess(name, _ipaddress, _user) )
 				continue;
 
 			RingPtr ring = _storage->ring(name);
@@ -922,7 +899,7 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const strin
 
 			auto descIt = _descriptions.find(name);
 			string desc = (descIt != _descriptions.end())? descIt->second: name;
-			info->addStation(ring, desc);
+			info->addStation(ring, desc, streamRegex);
 		}
 	}
 
@@ -937,7 +914,7 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const strin
 		return;
 	}
 
-	if ( _slproto >= 4.0) sendJSON(info);
+	if ( _slproto >= 4.0) sendJSON(info, "I");
 	else sendMSXML(info, "INF");
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -949,7 +926,7 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &net, const strin
 void SeedlinkSession::infoError(const string &code, const string &message) {
 	InfoPtr info = new InfoError(_slproto, SOFTWARE, global.organization, Core::Time(), code, message);
 
-	if ( _slproto >= 4.0) sendJSON(info);
+	if ( _slproto >= 4.0) sendJSON(info, "E");
 	else sendMSXML(info, "ERR");
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -958,7 +935,7 @@ void SeedlinkSession::infoError(const string &code, const string &message) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void SeedlinkSession::sendJSON(InfoPtr info) {
+void SeedlinkSession::sendJSON(InfoPtr info, const char *code) {
 	string data;
 
 	{
@@ -974,7 +951,8 @@ void SeedlinkSession::sendJSON(InfoPtr info) {
 	string header;
 	header.reserve(16);
 	uint32_t length = data.size();
-	header.append("SEI\0", 4);
+	header.append("SEJ", 3);
+	header.append(code);
 	header.append((char *)&length, 4); // TODO: byteorder
 	header.append("\0\0\0\0\0\0\0\0", 8);
 	send(header.data(), header.size());
@@ -1055,14 +1033,14 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		if ( len < 16 )
 			break;
 
-		FormatCode formatCode;
+		string formatCode;
 		uint32_t headerLength;
 		uint32_t payloadLength;
 		Sequence seq;
 		bool seq24bit;
 
 		if ( data[0] == 'S' && data[1] == 'L' ) {  // legacy format
-			formatCode = FMT_MSEED24;
+			formatCode = "2D";
 			headerLength = 8;
 			payloadLength = 512;
 			seq = SEQ_UNSET;
@@ -1085,8 +1063,8 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			}
 		}
 		else if ( data[0] == 'S' && data[1] == 'E' ) {
-			formatCode = (FormatCode)data[2];
-			headerLength = 16;
+			formatCode = string(&data[2], &data[4]);
+			headerLength = 17 + *(uint8_t *)(data + 16);
 			payloadLength = *(uint32_t *)(data + 4);  // TODO: byteorder
 			seq = *(Sequence *)(data + 8);            // TODO: byteorder
 			seq24bit = false;
@@ -1102,7 +1080,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 
 		Format* format = Format::get(formatCode);
 		if ( !format ) {
-			SEISCOMP_ERROR("unsupported format");
+			SEISCOMP_ERROR("unsupported format: %s", formatCode.c_str());
 			close();
 			return;
 		}
@@ -1115,7 +1093,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			continue;
 		}
 
-		string ringName = rec->network() + "." + rec->station();
+		string ringName = rec->station();
 
 		RingPtr ring = _storage->ring(ringName);
 
@@ -1147,12 +1125,10 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			seq = (ring->sequence() & ~0xffffffULL) | (seq & 0xffffff);
 
 		if ( !ring->put(rec, seq) )
-			SEISCOMP_WARNING("dropped %s.%s.%s.%s seq %0*llX",
-					 rec->network().c_str(),
+			SEISCOMP_WARNING("dropped %s_%s.%s seq %lld",
 					 rec->station().c_str(),
-					 rec->location().c_str(),
-					 rec->channel().c_str(),
-					 seq24bit? 6: 16,
+					 rec->stream().c_str(),
+					 rec->format().c_str(),
 					 (unsigned long long)seq);
 
 		data += headerLength + payloadLength;
@@ -1260,21 +1236,6 @@ void SeedlinkSession::startTransfer() {
 		}
 	}
 
-	for ( auto i : _cursors ) {
-		if ( _slproto < 4.0 ) {
-			i.second->accept(FMT_MSEED24);
-			i.second->accept(FMT_MSEED24_EVENT);
-			i.second->accept(FMT_MSEED24_CALIBRATION);
-			i.second->accept(FMT_MSEED24_TIMING);
-			i.second->accept(FMT_MSEED24_OPAQUE);
-			i.second->accept(FMT_MSEED24_LOG);
-		}
-		else {
-			for ( auto j : _accept )
-				i.second->accept(j);
-		}
-	}
-
 	_cursorIter = _cursorsAvail.begin();
 	_transfer = true;
 
@@ -1306,28 +1267,24 @@ void SeedlinkSession::collectData() {
 
 			if ( rec ) {
 				if ( _slproto < 4.0 ) {
-					if ( rec->format() != FMT_MSEED24 &&
-					     rec->format() != FMT_MSEED24_EVENT &&
-					     rec->format() != FMT_MSEED24_CALIBRATION &&
-					     rec->format() != FMT_MSEED24_TIMING &&
-					     rec->format() != FMT_MSEED24_OPAQUE &&
-					     rec->format() != FMT_MSEED24_LOG )
-						throw logic_error("unexpected format");
-
-					char seqstr[7];
-					snprintf(seqstr, 7, "%06llX", (long long unsigned int)(rec->sequence() & 0xffffff));
-					buffer.append("SL");
-					buffer.append(seqstr);
-					buffer.append(rec->payload());
+					if ( rec->format().substr(0, 1) == "2" && rec->payloadLength() == 512 ) {
+						char seqstr[7];
+						snprintf(seqstr, 7, "%06llX", (long long unsigned int)(rec->sequence() & 0xffffff));
+						buffer.append("SL");
+						buffer.append(seqstr);
+						buffer.append(rec->payload());
+					}
 				}
 				else {
 					Sequence seq = rec->sequence();
 					uint32_t payloadLength = rec->payloadLength();
+					uint8_t stationLength = rec->station().length();
 					buffer.append("SE");
-					buffer.push_back(char(rec->format()));
-					buffer.push_back(char(0));
+					buffer.append(rec->format());
 					buffer.append((char *)&payloadLength, 4);  // TODO: byteorder
 					buffer.append((char *)&seq, 8);            // TODO: byteorder
+					buffer.append((char *)&stationLength, 1);
+					buffer.append(rec->station());
 					buffer.append(rec->payload());
 				}
 			}
@@ -1417,19 +1374,6 @@ void SeedlinkSession::stationAvail(const string &name) {
 			throw logic_error("station " + name + " not found");
 
 		CursorPtr cursor = station->cursor(ring, *this, _slproto);
-
-		if ( _slproto < 4.0 ) {
-			cursor->accept(FMT_MSEED24);
-			cursor->accept(FMT_MSEED24_EVENT);
-			cursor->accept(FMT_MSEED24_CALIBRATION);
-			cursor->accept(FMT_MSEED24_TIMING);
-			cursor->accept(FMT_MSEED24_OPAQUE);
-			cursor->accept(FMT_MSEED24_LOG);
-		}
-		else {
-			for ( auto j : _accept )
-				cursor->accept(j);
-		}
 
 		_cursors.insert(pair<string, CursorPtr>(name, cursor));
 		_cursorsAvail.insert(cursor);

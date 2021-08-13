@@ -19,7 +19,7 @@ int main() {
 	char format;
 
 	if ( msr->formatversion == 2 ) {
-		format = '2';
+		format = 'D';
 
 		if ( msr->samplecnt == 0 ) {
 			if ( mseh_exists(msr, "FDSN.Event.Detection" ) ) {
@@ -40,7 +40,7 @@ int main() {
 		}
 	}
 	else if ( msr->formatversion == 3 ) {
-		format = '3';
+		format = 'D';
 	}
 	else {
 		fprintf(stderr, "unsupported version\n");

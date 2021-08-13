@@ -13,13 +13,15 @@ def copydata(ifd, ofd):
     while True:
         sig = ifd.read(4)
 
-        if sig[:2] != b"SE":
+        if sig[:3] != b"SE2":
             print("invalid signature")
             break
 
-        len = struct.unpack("<L", ifd.read(4))[0]
+        plen = struct.unpack("<L", ifd.read(4))[0]
         ifd.read(8)  # discard sequence number
-        msrec = ifd.read(len)
+        slen = struct.unpack("<B", ifd.read(1))[0]
+        ifd.read(slen)  # discard station ID
+        msrec = ifd.read(plen)
         ofd.write(msrec)
         ofd.flush()
 
@@ -32,10 +34,10 @@ def main():
     ifd.write(b"SLPROTO 4.0\r\n")
     ifd.flush()
     expect(ifd, b"OK")
-    ifd.write(b"ACCEPT 2 E C T L O\r\n")
+    ifd.write(b"STATION * GE\r\n")
     ifd.flush()
     expect(ifd, b"OK")
-    ifd.write(b"STATION * GE\r\n")
+    ifd.write(b"SELECT *.2\r\n")
     ifd.flush()
     expect(ifd, b"OK")
     ifd.write(b"DATA\r\n")

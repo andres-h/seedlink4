@@ -49,7 +49,6 @@ class Cursor : public Core::BaseObject {
 		void setStart(Core::Time t);
 		void setEnd(Core::Time t);
 		void select(SelectorPtr sel);
-		void accept(FormatCode format);
 		RecordPtr next();
 		Sequence sequence();
 		bool endOfData();
@@ -68,7 +67,6 @@ class Cursor : public Core::BaseObject {
 		Core::Time _starttime;
 		Core::Time _endtime;
 		std::list<SelectorPtr> _selectors;
-		std::set<FormatCode> _formats;
 
 		bool match(RecordPtr rec);
 };
@@ -94,15 +92,14 @@ class Stream : public Core::BaseObject {
 	friend class StreamInfo;
 
 	public:
-		Stream(): _format(0) {}
-		Stream(const std::string &loc,
-		       const std::string &cha,
-		       FormatCode format,
+		Stream() {}
+		Stream(const std::string &name,
+		       const std::string &format,
 		       const Core::Time &starttime,
 		       const Core::Time &endtime);
 
 		std::string id();
-		FormatCode format();
+		std::string format();
 
 		Core::Time startTime();
 		Core::Time endTime();
@@ -113,9 +110,8 @@ class Stream : public Core::BaseObject {
 		void serialize(Core::Archive &ar);
 
 	private:
-		std::string _loc;
-		std::string _cha;
-		FormatCode _format;
+		std::string _name;
+		std::string _format;
 		Core::Time _starttime;
 		Core::Time _endtime;
 };
@@ -131,7 +127,7 @@ class Ring : public Core::BaseObject, private CursorOwner {
 
 		~Ring();
 
-		void setOrdered(bool ordered);
+		void setBackfill(int backfill);
 		void serialize(Core::Archive &ar);
 		bool load();
 		void save();
@@ -142,14 +138,14 @@ class Ring : public Core::BaseObject, private CursorOwner {
 
 	private:
 		const std::string _path;
-		const std::string _name;
+		std::string _name;
 		int _nblocks;
 		int _blocksize;
 		int _shift;
 		Sequence _baseseq;
 		Sequence _startseq;
 		Sequence _endseq;
-		bool _ordered;
+		int _backfill;
 		std::streambuf *_sb;
 		std::map<std::string, StreamPtr> _streams;
 		std::set<Cursor*> _cursors;

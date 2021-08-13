@@ -24,23 +24,26 @@ namespace Seedlink {
 
 
 class Format : public Core::BaseObject {
+	friend class FormatsInfo;
 	friend class FormatInfo;
+	friend class SubformatInfo;
 
 	public:
-		Format(FormatCode code, const std::string &mimetype);
+		Format(const std::string &code, const std::string &mimetype, const std::string &description);
 
 		virtual ssize_t readRecord(const void *buf, size_t len, RecordPtr &rec) =0;
 
-		static Format* get(FormatCode code);
+		static Format* get(const std::string &code);
 
 	private:
-		FormatCode _code;
+		std::string _code;
 		std::string _mimetype;
+		std::string _description;
 
-		static std::map<FormatCode, Format*> _instances;
+		static std::map<char, std::map<char, Format*> > _instances;
 
 	protected:
-		FormatCode formatCode() { return _code; }
+		std::string formatCode() { return _code; }
 };
 
 }

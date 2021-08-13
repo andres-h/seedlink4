@@ -24,13 +24,8 @@ namespace Seedlink {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Selector::initPattern(regex &r, const string &src, double slproto) {
-	if ( src.length() == 0 ) {
-		r = regex(".*");
-		return true;
-	}
-
 	if (slproto >= 4.0) {
-		if ( !regex_match(src, regex("[A-Z0-9\\-\\?\\*]*")) )
+		if ( !regex_match(src, regex("[A-Z0-9_\\?\\*]*")) )
 			return false;
 	}
 	else {
@@ -38,11 +33,12 @@ bool Selector::initPattern(regex &r, const string &src, double slproto) {
 			return false;
 	}
 
-	string s = regex_replace(src, regex("-"), " ");
-	s = regex_replace(s, regex("\\?"), ".");
+	string s = regex_replace(src, regex("\\?"), ".");
 
 	if ( slproto >= 4.0 )
 		s = regex_replace(s, regex("\\*"), ".*");
+	else
+		s = regex_replace(s, regex("-"), " ");
 
 	r = regex(s);
 	return true;
@@ -54,9 +50,8 @@ bool Selector::initPattern(regex &r, const string &src, double slproto) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Selector::init(const string &selstr, double slproto) {
-	string loc = "";
-	string cha = "";
-	string fmt = "";
+	string stream = "*";
+	string fmt = "*";
 	string s;
 
 	if (selstr[0] == '!') {
@@ -68,33 +63,27 @@ bool Selector::init(const string &selstr, double slproto) {
 		s = selstr;
 	}
 
-	size_t p = s.find_first_of('.');
+	size_t p = s.find('.');
 
 	if ( slproto >= 4.0 ) {
-		if ( p == string::npos )
-			return false;
-
-		loc = s.substr(0, p);
-		s = s.substr(p + 1);
-		p = s.find_first_of('.');
-
 		if ( p != string::npos ) {
-			cha = s.substr(0, p);
-			fmt = s.substr(p + 1);
+			stream = s.substr(0, p);
+			fmt = s.substr(p + 1) + "*";
 		}
 		else {
-			cha = s;
+			stream = s;
 		}
 	}
 	else {
-		char type = 0;
+		string loc = "??";
+		string cha = "???";
 
 		if ( p != string::npos ) {
-			if ( s.length() != p + 2 )
-				return false;
-
-			type = s[p + 1];
 			s = s.substr(0, p);
+			fmt = "2" + s.substr(p + 1);
+
+			if ( fmt.length() != 2 )
+				return false;
 		}
 
 		if ( s.length() == 5 ) {
@@ -105,47 +94,19 @@ bool Selector::init(const string &selstr, double slproto) {
 			cha = s;
 		}
 		else if ( s.length() == 1 && selstr.length() == 1) {
-			type = s[0];
+			fmt = "2" + s;
 		}
 		else if ( s.length() != 0 ) {
 			return false;
 		}
 
-		switch ( type ) {
-			case 'D':
-				fmt = string(1, FMT_MSEED24);
-				break;
+		if ( cha.length() != 3 )
+			throw logic_error("invalid channel length");
 
-			case 'E':
-				fmt = string(1, FMT_MSEED24_EVENT);
-				break;
-
-			case 'C':
-				fmt = string(1, FMT_MSEED24_CALIBRATION);
-				break;
-
-			case 'T':
-				fmt = string(1, FMT_MSEED24_TIMING);
-				break;
-
-			case 'O':
-				fmt = string(1, FMT_MSEED24_OPAQUE);
-				break;
-
-			case 'L':
-				fmt = string(1, FMT_MSEED24_LOG);
-				break;
-
-			case 0:
-				break;
-
-			default:
-				return false;
-		}
+		stream = loc + "_" + cha[0] + "_" + cha[1] + "_" + cha[2];
 	}
 
-	return (initPattern(_rloc, loc, slproto) &&
-		initPattern(_rcha, cha, slproto) &&
+	return (initPattern(_rstream, stream, slproto) &&
 		initPattern(_rfmt, fmt, slproto));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -155,9 +116,8 @@ bool Selector::init(const string &selstr, double slproto) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Selector::match(RecordPtr rec) {
-	return (regex_match(rec->location(), _rloc) &&
-		regex_match(rec->channel(), _rcha) &&
-		regex_match(string(1, rec->format()), _rfmt));
+	return (regex_match(rec->stream(), _rstream) &&
+		regex_match(rec->format(), _rfmt));
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

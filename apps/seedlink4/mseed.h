@@ -21,7 +21,11 @@ namespace Seedlink {
 
 class MseedFormat : public Format {
 	public:
-		MseedFormat(FormatCode code, const std::string &mimetype, uint8_t version);
+		MseedFormat(const std::string &code,
+			    const std::string &mimetype,
+			    const std::string &description,
+			    uint8_t version);
+
 		ssize_t readRecord(const void *buf, size_t len, RecordPtr &rec);
 
 	private:

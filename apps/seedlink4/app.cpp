@@ -105,9 +105,9 @@ bool Application::init() {
 							   segsize,
 							   recsize);
 
-			bool ordered = false;
-			keys->getBool(ordered, "ordered");
-			ring->setOrdered(ordered);
+			int backfill = -1;
+			keys->getInt(backfill, "backfillHint");
+			ring->setBackfill(backfill);
 
 			string accessStr = global.access;
 			if ( !keys->getString(accessStr, "access") )
@@ -126,7 +126,7 @@ bool Application::init() {
 			DataModel::Network* net = inv->network(i);
 			for ( unsigned int j = 0; j < net->stationCount(); ++j ) {
 				DataModel::Station* sta = net->station(j);
-				descriptions.insert(pair<string, string>(net->code() + "." + sta->code(),
+				descriptions.insert(pair<string, string>(net->code() + "_" + sta->code(),
 									 sta->description()));
 			}
 		}
@@ -156,8 +156,8 @@ bool Application::init() {
 		}
 	}
 	catch (const exception &e) {
-               SEISCOMP_ERROR("%s", e.what());
-               return false;
+		SEISCOMP_ERROR("%s", e.what());
+		return false;
 	}
 
 	return true;
