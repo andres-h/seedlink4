@@ -1112,7 +1112,7 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 			}
 
 			for ( auto i : parent()->sessions() ) {
-				SeedlinkSession* s = dynamic_cast<SeedlinkSession*>(i.get());
+				SeedlinkSession* s = dynamic_cast<SeedlinkSession*>(i);
 
 				if ( s )
 					s->stationAvail(ringName);
