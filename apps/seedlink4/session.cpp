@@ -663,8 +663,8 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	}
 
 	if ( tokLen == 5 && strncasecmp(tok, "FETCH", tokLen) == 0 ) {
-		if ( _slproto >= 4.0 && _stations.empty() && _wildcardStations.empty() ) {
-			sendResponse("ERROR UNSUPPORTED uni-station mode is not supported in v4\r\n");
+		if ( _slproto >= 4.0 ) {
+			sendResponse("ERROR UNSUPPORTED not supported in v4\r\n");
 			return;
 		}
 
@@ -691,6 +691,32 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			// no stations requested
 			sendResponse("END");
 			return;
+		}
+
+		startTransfer();
+		return;
+	}
+
+	if ( tokLen == 8 && strncasecmp(tok, "ENDFETCH", tokLen) == 0 ) {
+		if ( _slproto < 4.0 ) {
+			sendResponse("ERROR UNSUPPORTED\r\n");
+			return;
+		}
+
+		_type = Client;
+
+		if ( _stations.empty() && _wildcardStations.empty() ) {
+			// no stations requested
+			sendResponse("END");
+			return;
+		}
+
+		for ( auto i : _stations ) {
+			i.second->setDialup(true);
+		}
+
+		for ( auto i : _wildcardStations ) {
+			i->setDialup(true);
 		}
 
 		startTransfer();
