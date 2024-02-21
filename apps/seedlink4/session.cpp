@@ -43,15 +43,8 @@ namespace Applications {
 namespace Seedlink {
 
 
-#define TODO(cap) ""
-
-
-#define CAPABILITIES "SLPROTO:4.0 " \
-		     "AUTH:USERPASS " \
-		     TODO("AUTH:TOKEN ") \
-		     "TIME "
-
 #define SOFTWARE "SeedLink v4.0 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0"
+#define CAPABILITIES "AUTH:USERPASS", "TIME"
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 DEFINE_SMARTPOINTER(Station);
@@ -390,6 +383,15 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 				return;
 			}
 		}
+		else if ( tokLen == 12 && !strncasecmp(tok, "CAPABILITIES", tokLen) ) {
+			if ( _slproto >= 4.0 ) {
+				level = INFO_CAPABILITIES;
+			}
+			else {
+				infoError("ARGUMENTS", "requested info level is not supported");
+				return;
+			}
+		}
 		else if ( tokLen == 8 && !strncasecmp(tok, "STATIONS", tokLen) ) {
 			level = INFO_STATIONS;
 		}
@@ -489,11 +491,6 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	if ( tokLen == 9 && strncasecmp(tok, "USERAGENT", tokLen) == 0 ) {
 		_useragent = string(data, len);
 		if ( !_batch ) sendResponse("OK\r\n");
-		return;
-	}
-
-	if ( tokLen == 15 && strncasecmp(tok, "GETCAPABILITIES", tokLen) == 0 ) {
-		sendResponse(CAPABILITIES "\r\n");
 		return;
 	}
 
@@ -893,6 +890,9 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, const string &streamPattern) {
 	InfoPtr info = new Info(_slproto, SOFTWARE, global.organization, Core::Time(), level);
+
+	for ( auto cap : { CAPABILITIES } )
+		info->addCapability(cap);
 
 	if ( level >= INFO_STATIONS ) {
 		regex stationRegex;

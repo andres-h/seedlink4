@@ -202,6 +202,10 @@ Info::Info(double slproto, const string &software, const string &organization,
 	   const Core::Time &started, InfoLevel level)
 : _slproto(slproto), _software(software), _organization(organization), _started(started)
 , _level(level) {
+	ostringstream os;
+	os.precision(1);
+        os << fixed << _slproto;
+	_capabilities.push_back("SLPROTO:" + os.str());
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -218,6 +222,15 @@ void Info::addStation(RingPtr ring, const string &description, const regex &stre
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void Info::addCapability(const string &name) {
+	_capabilities.push_back(name);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Info::serialize(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("software", _software, ARCHIVE_FLAGS);
 	ar & NAMED_OBJECT_HINT("organization", _organization, ARCHIVE_FLAGS);
@@ -226,6 +239,10 @@ void Info::serialize(Core::Archive &ar) {
 	if ( _level >= INFO_FORMATS && _slproto >= 4.0 ) {
 		FormatsInfoPtr formatsInfo = new FormatsInfo(_slproto);
 		ar & NAMED_OBJECT_HINT("format", formatsInfo, ARCHIVE_FLAGS);
+	}
+
+	if ( _level >= INFO_CAPABILITIES && _slproto >= 4.0 ) {
+		ar & NAMED_OBJECT_HINT("capability", _capabilities, ARCHIVE_FLAGS);
 	}
 
 	if ( _level >= INFO_STATIONS )

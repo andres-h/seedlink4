@@ -32,6 +32,7 @@ namespace Seedlink {
 enum InfoLevel {
 	INFO_ID,
 	INFO_FORMATS,
+	INFO_CAPABILITIES,
 	INFO_STATIONS,
 	INFO_STREAMS,
 	INFO_CONNECTIONS
@@ -112,6 +113,7 @@ class Info : public Core::BaseObject {
 		     const Core::Time &started, InfoLevel level);
 
 		void addStation(RingPtr ring, const std::string &description, const std::regex &streamRegex);
+		void addCapability(const std::string &name);
 		void serialize(Core::Archive &ar);
 
 	private:
@@ -121,6 +123,7 @@ class Info : public Core::BaseObject {
 		Core::Time _started;
 		InfoLevel _level;
 		std::list<RingInfoPtr> _stations;
+		std::vector<std::string> _capabilities;
 };
 
 
