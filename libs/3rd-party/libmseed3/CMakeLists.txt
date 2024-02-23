@@ -4,7 +4,6 @@ ADD_LIBRARY(mseed3 STATIC
 	fileutils.c
 	genutils.c
 	gmtime64.c
-	gswap.c
 	logging.c
 	lookup.c
 	msio.c
@@ -12,9 +11,9 @@ ADD_LIBRARY(mseed3 STATIC
 	pack.c
 	packdata.c
 	parseutils.c
-	parson.c
 	selection.c
 	tracelist.c
 	unpack.c
 	unpackdata.c
+	yyjson.c
 )

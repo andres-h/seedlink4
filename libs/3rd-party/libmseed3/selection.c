@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ static int ms_globmatch (const char *string, const char *pattern);
  * Search the ::MS3Selections for an entry matching the provided
  * parameters.  The ::MS3Selections.sidpattern may contain globbing
  * characters.  The ::MS3Selections.timewindows many contain start and
- * end times set to ::NSTERROR to denote "open" times.
+ * end times set to ::NSTUNSET to denote "open" times.
  *
  * Positive matching requires:
  * @parblock
@@ -54,13 +54,13 @@ static int ms_globmatch (const char *string, const char *pattern);
  * @returns A pointer to matching ::MS3Selections entry successful
  * match and NULL for no match or error.
  ***************************************************************************/
-MS3Selections *
-ms3_matchselect (MS3Selections *selections, char *sid, nstime_t starttime,
-                 nstime_t endtime, int pubversion, MS3SelectTime **ppselecttime)
+const MS3Selections *
+ms3_matchselect (const MS3Selections *selections, const char *sid, nstime_t starttime,
+                 nstime_t endtime, int pubversion, const MS3SelectTime **ppselecttime)
 {
-  MS3Selections *findsl = NULL;
-  MS3SelectTime *findst = NULL;
-  MS3SelectTime *matchst = NULL;
+  const MS3Selections *findsl = NULL;
+  const MS3SelectTime *findst = NULL;
+  const MS3SelectTime *matchst = NULL;
 
   if (selections)
   {
@@ -88,13 +88,15 @@ ms3_matchselect (MS3Selections *selections, char *sid, nstime_t starttime,
         findst = findsl->timewindows;
         while (findst)
         {
-          if (starttime != NSTERROR && findst->starttime != NSTERROR &&
+          if (starttime != NSTERROR && starttime != NSTUNSET &&
+              findst->starttime != NSTERROR && findst->starttime != NSTUNSET &&
               (starttime < findst->starttime && !(starttime <= findst->starttime && endtime >= findst->starttime)))
           {
             findst = findst->next;
             continue;
           }
-          else if (endtime != NSTERROR && findst->endtime != NSTERROR &&
+          else if (endtime != NSTERROR && endtime != NSTUNSET &&
+                   findst->endtime != NSTERROR && findst->endtime != NSTUNSET &&
                    (endtime > findst->endtime && !(starttime <= findst->endtime && endtime >= findst->endtime)))
           {
             findst = findst->next;
@@ -139,8 +141,9 @@ ms3_matchselect (MS3Selections *selections, char *sid, nstime_t starttime,
  * @returns A pointer to matching ::MS3Selections entry successful
  * match and NULL for no match or error.
  ***************************************************************************/
-MS3Selections *
-msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **ppselecttime)
+const MS3Selections *
+msr3_matchselect (const MS3Selections *selections, const MS3Record *msr,
+                  const MS3SelectTime **ppselecttime)
 {
   nstime_t endtime;
 
@@ -158,7 +161,7 @@ msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **pps
  *
  * The \a sidpattern may contain globbing characters.
  *
- * The \a starttime and \a endtime may be set to ::NSTERROR to denote
+ * The \a starttime and \a endtime may be set to ::NSTUNSET to denote
  * "open" times.
  *
  * The \a pubversion may be set to 0 to match any publication
@@ -166,8 +169,8 @@ msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **pps
  *
  * @param[in] ppselections ::MS3Selections to add new selection to
  * @param[in] sidpattern Source ID pattern, may contain globbing characters
- * @param[in] starttime Start time for selection, ::NSTERROR for open
- * @param[in] endtime End time for selection, ::NSTERROR for open
+ * @param[in] starttime Start time for selection, ::NSTUNSET for open
+ * @param[in] endtime End time for selection, ::NSTUNSET for open
  * @param[in] pubversion Publication version for selection, 0 for any
  *
  * @returns 0 on success and -1 on error.
@@ -175,7 +178,7 @@ msr3_matchselect (MS3Selections *selections, MS3Record *msr, MS3SelectTime **pps
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms3_addselect (MS3Selections **ppselections, char *sidpattern,
+ms3_addselect (MS3Selections **ppselections, const char *sidpattern,
                nstime_t starttime, nstime_t endtime, uint8_t pubversion)
 {
   MS3Selections *newsl = NULL;
@@ -183,7 +186,8 @@ ms3_addselect (MS3Selections **ppselections, char *sidpattern,
 
   if (!ppselections || !sidpattern)
   {
-    ms_log (2, "Required argument not defined: 'ppselections' or 'sidpattern'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections' or 'sidpattern'\n",
+            __func__);
     return -1;
   }
 
@@ -271,7 +275,7 @@ ms3_addselect (MS3Selections **ppselections, char *sidpattern,
  * The \a network, \a station, \a location, and \a channel arguments may
  * contain globbing parameters.
 
- * The \a starttime and \a endtime may be set to ::NSTERROR to denote
+ * The \a starttime and \a endtime may be set to ::NSTUNSET to denote
  * "open" times.
  *
  * The \a pubversion may be set to 0 to match any publication
@@ -289,8 +293,8 @@ ms3_addselect (MS3Selections **ppselections, char *sidpattern,
  * @param[in] station Statoin code, may contain globbing characters
  * @param[in] location Location code, may contain globbing characters
  * @param[in] channel channel code, may contain globbing characters
- * @param[in] starttime Start time for selection, ::NSTERROR for open
- * @param[in] endtime End time for selection, ::NSTERROR for open
+ * @param[in] starttime Start time for selection, ::NSTUNSET for open
+ * @param[in] endtime End time for selection, ::NSTUNSET for open
  * @param[in] pubversion Publication version for selection, 0 for any
  *
  * @return 0 on success and -1 on error.
@@ -310,7 +314,7 @@ ms3_addselect_comp (MS3Selections **ppselections, char *network, char *station,
 
   if (!ppselections)
   {
-    ms_log (2, "Required argument not defined: 'ppselections'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections'\n", __func__);
     return -1;
   }
 
@@ -410,18 +414,18 @@ ms3_addselect_comp (MS3Selections **ppselections, char *network, char *station,
  *
  * In the latter version, if the "Channel" field is a SEED 2.x channel
  * (3-characters) it will automatically be converted into extended
- * channel form (band_source_position).
+ * channel form (band_source_subsource).
  *
  * In the latter version, the "Pubversion" field, which was "Quality"
- * in the previous version of the library, is assumed to be a
- * publication version if it is an integer, otherwise it is ignored.
+ * in earlier versions of the library, is assumed to be a publication
+ * version if it is an integer, otherwise it is ignored.
  *
  * @returns Count of selections added on success and -1 on error.
  *
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
+ms3_readselectionsfile (MS3Selections **ppselections, const char *filename)
 {
   FILE *fp;
   nstime_t starttime;
@@ -442,7 +446,8 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
 
   if (!ppselections || !filename)
   {
-    ms_log (2, "Required argument not defined: 'ppselections' or 'filename'\n");
+    ms_log (2, "%s(): Required input not defined: 'ppselections' or 'filename'\n",
+            __func__);
     return -1;
   }
 
@@ -539,7 +544,7 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
     isend7 = (fields[6]) ? ms_globmatch (fields[6], INITDATEGLOB) : 0;
 
     /* Convert starttime to nstime_t */
-    starttime = NSTERROR;
+    starttime = NSTUNSET;
     cp = NULL;
     if (isstart2)
       cp = fields[1];
@@ -548,7 +553,7 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
     if (cp)
     {
       starttime = ms_timestr2nstime (cp);
-      if (starttime == NSTERROR)
+      if (starttime == NSTUNSET)
       {
         ms_log (2, "Cannot convert data selection start time (line %d): %s\n", linecount, cp);
         return -1;
@@ -556,7 +561,7 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
     }
 
     /* Convert endtime to nstime_t */
-    endtime = NSTERROR;
+    endtime = NSTUNSET;
     cp = NULL;
     if (isend3)
       cp = fields[2];
@@ -565,7 +570,7 @@ ms3_readselectionsfile (MS3Selections **ppselections, char *filename)
     if (cp)
     {
       endtime = ms_timestr2nstime (cp);
-      if (endtime == NSTERROR)
+      if (endtime == NSTUNSET)
       {
         ms_log (2, "Cannot convert data selection end time (line %d): %s\n", linecount, cp);
         return -1;
@@ -699,9 +704,9 @@ ms3_freeselections (MS3Selections *selections)
  * @param[in] selections Start of ::MS3Selections to print
  ***************************************************************************/
 void
-ms3_printselections (MS3Selections *selections)
+ms3_printselections (const MS3Selections *selections)
 {
-  MS3Selections *select;
+  const MS3Selections *select;
   MS3SelectTime *selecttime;
   char starttime[50];
   char endtime[50];
@@ -718,13 +723,13 @@ ms3_printselections (MS3Selections *selections)
     selecttime = select->timewindows;
     while (selecttime)
     {
-      if (selecttime->starttime != NSTERROR)
-        ms_nstime2timestr (selecttime->starttime, starttime, 2, 1);
+      if (selecttime->starttime != NSTERROR && selecttime->starttime != NSTUNSET)
+        ms_nstime2timestr (selecttime->starttime, starttime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
       else
         strncpy (starttime, "No start time", sizeof (starttime) - 1);
 
-      if (selecttime->endtime != NSTERROR)
-        ms_nstime2timestr (selecttime->endtime, endtime, 2, 1);
+      if (selecttime->endtime != NSTERROR && selecttime->endtime != NSTUNSET)
+        ms_nstime2timestr (selecttime->endtime, endtime, ISOMONTHDAY_Z, NANO_MICRO_NONE);
       else
         strncpy (endtime, "No end time", sizeof (endtime) - 1);
 
@@ -911,6 +916,8 @@ ms_globmatch (const char *string, const char *pattern)
     case '\\':
       if (*pattern)
         c = *pattern++;
+      break;
+
     default:
       if (c != *string)
         return GLOBMATCH_FALSE;

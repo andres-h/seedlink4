@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2020 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -202,6 +202,7 @@ msio_fopen (LMIO *io, const char *path, const char *mode,
   if (!knownfile && strstr (path, "://"))
   {
 #if !defined(LIBMSEED_URL)
+    (void)endoffset; /* Unused */
     ms_log (2, "URL support not included in library for %s\n", path);
     return -1;
 #else
@@ -316,9 +317,12 @@ msio_fopen (LMIO *io, const char *path, const char *mode,
       char endstr[21]   = {0};
       char rangestr[42];
 
-      /* Build Range header value, either of the range ends are optional */
+      /* Build Range header value.
+       * If start is undefined set it to zero if end is defined. */
       if (*startoffset > 0)
         snprintf (startstr, sizeof (startstr), "%" PRId64, *startoffset);
+      else if (*endoffset > 0)
+        snprintf (startstr, sizeof (startstr), "0");
       if (*endoffset > 0)
         snprintf (endstr, sizeof (endstr), "%" PRId64, *endoffset);
 
@@ -419,20 +423,20 @@ msio_fclose (LMIO *io)
 
   if (!io)
   {
-    ms_log (2, "Required argument not defined: 'io'\n");
+    ms_log (2, "%s(): Required input not defined: 'io'\n", __func__);
     return -1;
   }
 
   if (io->handle == NULL || io->type == LMIO_NULL)
     return 0;
 
-  if (io->type == LMIO_FILE)
+  if (io->type == LMIO_FILE || io->type == LMIO_FD)
   {
     rv = fclose (io->handle);
 
     if (rv)
     {
-      ms_log (2, "Error closing file (%s)\n", strerror(errno));
+      ms_log (2, "Error closing file (%s)\n", strerror (errno));
       return -1;
     }
   }
@@ -486,7 +490,7 @@ msio_fread (LMIO *io, void *buffer, size_t size)
   }
 
   /* Read from regular file stream */
-  if (io->type == LMIO_FILE)
+  if (io->type == LMIO_FILE || io->type == LMIO_FD)
   {
     read = fread (buffer, 1, size, io->handle);
   }
@@ -595,7 +599,7 @@ msio_feof (LMIO *io)
   if (io->handle == NULL || io->type == LMIO_NULL)
     return 0;
 
-  if (io->type == LMIO_FILE)
+  if (io->type == LMIO_FILE || io->type == LMIO_FD)
   {
     if (feof ((FILE *)io->handle))
       return 1;
@@ -634,11 +638,12 @@ msio_url_useragent (const char *program, const char *version)
 {
   if (!program)
   {
-    ms_log (2, "Required argument not defined: 'program'\n");
+    ms_log (2, "%s(): Required input not defined: 'program'\n", __func__);
     return -1;
   }
 
 #if !defined(LIBMSEED_URL)
+  (void)version; /* Unused */
   ms_log (2, "URL support not included in library\n");
   return -1;
 #else
@@ -671,7 +676,7 @@ msio_url_userpassword (const char *userpassword)
 {
   if (!userpassword)
   {
-    ms_log (2, "Required argument not defined: 'userpassword'\n");
+    ms_log (2, "%s(): Required input not defined: 'userpassword'\n", __func__);
     return -1;
   }
 
@@ -713,7 +718,7 @@ msio_url_addheader (const char *header)
 {
   if (!header)
   {
-    ms_log (2, "Required argument not defined: 'header'\n");
+    ms_log (2, "%s(): Required input not defined: 'header'\n", __func__);
     return -1;
   }
 

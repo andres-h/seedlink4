@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2019 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ extern "C" {
 #include <stdint.h>
 #include "libmseed.h"
 
-/* Length of Fixed Section of Data Header for miniSEED 3 */
+/* Length of Fixed Section of Data Header for miniSEED v3 */
 #define MS3FSDH_LENGTH 40
 
 /***************************************************************************
@@ -77,6 +77,9 @@ extern "C" {
 #define pMS3FSDH_EXTRALENGTH(record)     ((uint16_t*)((uint8_t*)record+34))
 #define pMS3FSDH_DATALENGTH(record)      ((uint32_t*)((uint8_t*)record+36))
 #define pMS3FSDH_SID(record)             ((char*)((uint8_t*)record+40))
+
+/* Length of Fixed Section of Data Header for miniSEED v2 */
+#define MS2FSDH_LENGTH 48
 
 /***************************************************************************
  * miniSEED 2.4 Fixed Section of Data Header
@@ -588,7 +591,7 @@ HO2d (int16_t value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap2a (&value);
+    ms_gswap2 (&value);
   }
   return value;
 }
@@ -597,7 +600,7 @@ HO2u (uint16_t value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap2a (&value);
+    ms_gswap2 (&value);
   }
   return value;
 }
@@ -606,7 +609,7 @@ HO4d (int32_t value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap4a (&value);
+    ms_gswap4 (&value);
   }
   return value;
 }
@@ -615,7 +618,7 @@ HO4u (uint32_t value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap4a (&value);
+    ms_gswap4 (&value);
   }
   return value;
 }
@@ -624,7 +627,7 @@ HO4f (float value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap4a (&value);
+    ms_gswap4 (&value);
   }
   return value;
 }
@@ -633,7 +636,7 @@ HO8f (double value, int swapflag)
 {
   if (swapflag)
   {
-    ms_gswap8a (&value);
+    ms_gswap8 (&value);
   }
   return value;
 }

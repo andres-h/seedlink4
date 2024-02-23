@@ -3,7 +3,7 @@
  *
  * This file is part of the miniSEED Library.
  *
- * Copyright (c) 2021 Chad Trabant, IRIS Data Management Center
+ * Copyright (c) 2024 Chad Trabant, EarthScope Data Services
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,11 +72,43 @@ libmseed_memory_prealloc (void *ptr, size_t size, size_t *currentsize)
   return newptr;
 }
 
-/* A constant number of seconds between the NTP and Posix/Unix time epoch */
+/* A constant number of seconds between the NTP and POSIX/Unix time epoch */
 #define NTPPOSIXEPOCHDELTA 2208988800LL
+#define NTPEPOCH2NSTIME(X) (MS_EPOCH2NSTIME (X - NTPPOSIXEPOCHDELTA))
+
+/* Embedded leap second list, good through: 28 December 2023 */
+static LeapSecond embedded_leapsecondlist[] = {
+    {.leapsecond = NTPEPOCH2NSTIME (2272060800), .TAIdelta = 10, .next = &embedded_leapsecondlist[1]},
+    {.leapsecond = NTPEPOCH2NSTIME (2287785600), .TAIdelta = 11, .next = &embedded_leapsecondlist[2]},
+    {.leapsecond = NTPEPOCH2NSTIME (2303683200), .TAIdelta = 12, .next = &embedded_leapsecondlist[3]},
+    {.leapsecond = NTPEPOCH2NSTIME (2335219200), .TAIdelta = 13, .next = &embedded_leapsecondlist[4]},
+    {.leapsecond = NTPEPOCH2NSTIME (2366755200), .TAIdelta = 14, .next = &embedded_leapsecondlist[5]},
+    {.leapsecond = NTPEPOCH2NSTIME (2398291200), .TAIdelta = 15, .next = &embedded_leapsecondlist[6]},
+    {.leapsecond = NTPEPOCH2NSTIME (2429913600), .TAIdelta = 16, .next = &embedded_leapsecondlist[7]},
+    {.leapsecond = NTPEPOCH2NSTIME (2461449600), .TAIdelta = 17, .next = &embedded_leapsecondlist[8]},
+    {.leapsecond = NTPEPOCH2NSTIME (2492985600), .TAIdelta = 18, .next = &embedded_leapsecondlist[9]},
+    {.leapsecond = NTPEPOCH2NSTIME (2524521600), .TAIdelta = 19, .next = &embedded_leapsecondlist[10]},
+    {.leapsecond = NTPEPOCH2NSTIME (2571782400), .TAIdelta = 20, .next = &embedded_leapsecondlist[11]},
+    {.leapsecond = NTPEPOCH2NSTIME (2603318400), .TAIdelta = 21, .next = &embedded_leapsecondlist[12]},
+    {.leapsecond = NTPEPOCH2NSTIME (2634854400), .TAIdelta = 22, .next = &embedded_leapsecondlist[13]},
+    {.leapsecond = NTPEPOCH2NSTIME (2698012800), .TAIdelta = 23, .next = &embedded_leapsecondlist[14]},
+    {.leapsecond = NTPEPOCH2NSTIME (2776982400), .TAIdelta = 24, .next = &embedded_leapsecondlist[15]},
+    {.leapsecond = NTPEPOCH2NSTIME (2840140800), .TAIdelta = 25, .next = &embedded_leapsecondlist[16]},
+    {.leapsecond = NTPEPOCH2NSTIME (2871676800), .TAIdelta = 26, .next = &embedded_leapsecondlist[17]},
+    {.leapsecond = NTPEPOCH2NSTIME (2918937600), .TAIdelta = 27, .next = &embedded_leapsecondlist[18]},
+    {.leapsecond = NTPEPOCH2NSTIME (2950473600), .TAIdelta = 28, .next = &embedded_leapsecondlist[19]},
+    {.leapsecond = NTPEPOCH2NSTIME (2982009600), .TAIdelta = 29, .next = &embedded_leapsecondlist[20]},
+    {.leapsecond = NTPEPOCH2NSTIME (3029443200), .TAIdelta = 30, .next = &embedded_leapsecondlist[21]},
+    {.leapsecond = NTPEPOCH2NSTIME (3076704000), .TAIdelta = 31, .next = &embedded_leapsecondlist[22]},
+    {.leapsecond = NTPEPOCH2NSTIME (3124137600), .TAIdelta = 32, .next = &embedded_leapsecondlist[23]},
+    {.leapsecond = NTPEPOCH2NSTIME (3345062400), .TAIdelta = 33, .next = &embedded_leapsecondlist[24]},
+    {.leapsecond = NTPEPOCH2NSTIME (3439756800), .TAIdelta = 34, .next = &embedded_leapsecondlist[25]},
+    {.leapsecond = NTPEPOCH2NSTIME (3550089600), .TAIdelta = 35, .next = &embedded_leapsecondlist[26]},
+    {.leapsecond = NTPEPOCH2NSTIME (3644697600), .TAIdelta = 36, .next = &embedded_leapsecondlist[27]},
+    {.leapsecond = NTPEPOCH2NSTIME (3692217600), .TAIdelta = 37, .next = NULL}};
 
 /* Global variable to hold a leap second list */
-LeapSecond *leapsecondlist = NULL;
+LeapSecond *leapsecondlist = &embedded_leapsecondlist[0];
 
 /* Days in each month, for non-leap and leap years */
 static const int monthdays[]      = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
@@ -107,7 +139,7 @@ static const int monthdays_leap[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30,
 #define VALIDSEC(sec) (sec >= 0 && sec <= 60)
 
 /* Check that a nanosecond is in a valid range */
-#define VALIDNANOSEC(nanosec) (nanosec >= 0 && nanosec <= 999999999)
+#define VALIDNANOSEC(nanosec) (nanosec <= 999999999)
 
 /** @endcond */
 
@@ -148,16 +180,17 @@ static const int monthdays_leap[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30,
  * \ref MessageOnError - this function logs a message on error
  ***************************************************************************/
 int
-ms_sid2nslc (char *sid, char *net, char *sta, char *loc, char *chan)
+ms_sid2nslc (const char *sid, char *net, char *sta, char *loc, char *chan)
 {
   size_t idlen;
+  const char *cid;
   char *id;
   char *ptr, *top, *next;
   int sepcnt = 0;
 
   if (!sid)
   {
-    ms_log (2, "Required argument not defined: 'sid'\n");
+    ms_log (2, "%s(): Required input not defined: 'sid'\n", __func__);
     return -1;
   }
 
@@ -168,10 +201,10 @@ ms_sid2nslc (char *sid, char *net, char *sta, char *loc, char *chan)
     sid = strrchr (sid, ':') + 1;
 
     /* Verify 5 delimiters */
-    id = sid;
-    while ((id = strchr (id, '_')))
+    cid = sid;
+    while ((cid = strchr (cid, '_')))
     {
-      id++;
+      cid++;
       sepcnt++;
     }
     if (sepcnt != 5)
@@ -255,9 +288,9 @@ ms_sid2nslc (char *sid, char *net, char *sta, char *loc, char *chan)
  * station, location and channel codes with the form:
  *  \c FDSN:NET_STA_LOC_CHAN, where \c CHAN="BAND_SOURCE_POSITION"
  *
- * Memory for the source identifier must already be allocated.  If a
- * specific component is NULL it will be empty in the resulting
- * identifier.
+ * Memory for the source identifier must already be allocated.
+ *
+ * If the \a loc value is NULL it will be empty in the resulting Source ID.
  *
  * The \a chan value will be converted to extended channel format if
  * it appears to be in SEED channel form.  Meaning, if the \a chan is
@@ -279,21 +312,22 @@ ms_sid2nslc (char *sid, char *net, char *sta, char *loc, char *chan)
  ***************************************************************************/
 int
 ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
-             char *net, char *sta, char *loc, char *chan)
+             const char *net, const char *sta, const char *loc, const char *chan)
 {
+  (void)flags; /* Unused */
   char *sptr = sid;
   char xchan[6] = {0};
   int needed = 0;
 
-  if (!sid)
+  if (!sid || !net || !sta || !chan)
   {
-    ms_log (2, "Required argument not defined: 'sid'\n");
+    ms_log (2, "%s(): Required input not defined: sid,net,sta,chan\n", __func__);
     return -1;
   }
 
-  if (sidlen < 13)
+  if (sidlen < 16)
   {
-    ms_log (2, "Length of destination SID buffer must be at least 13 bytes\n");
+    ms_log (2, "Length of destination SID buffer must be at least 16 bytes\n");
     return -1;
   }
 
@@ -304,38 +338,33 @@ ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
   *sptr++ = ':';
   needed  = 5;
 
-  if (net)
+  /* Network code */
+  while (*net)
   {
-    while (*net)
-    {
-      if ((sptr - sid) < sidlen)
-        *sptr++ = *net;
-
-      net++;
-      needed++;
-    }
+    if ((sptr - sid) < sidlen)
+      *sptr++ = *net;
+    net++;
+    needed++;
   }
 
   if ((sptr - sid) < sidlen)
     *sptr++ = '_';
   needed++;
 
-  if (sta)
+  /* Station code */
+  while (*sta)
   {
-    while (*sta)
-    {
-      if ((sptr - sid) < sidlen)
-        *sptr++ = *sta;
-
-      sta++;
-      needed++;
-    }
+    if ((sptr - sid) < sidlen)
+      *sptr++ = *sta;
+    sta++;
+    needed++;
   }
 
   if ((sptr - sid) < sidlen)
     *sptr++ = '_';
   needed++;
 
+  /* Location code, may be empty */
   if (loc)
   {
     while (*loc)
@@ -352,36 +381,38 @@ ms_nslc2sid (char *sid, int sidlen, uint16_t flags,
     *sptr++ = '_';
   needed++;
 
-  if (chan)
+  /* Map SEED channel to extended channel if possible, otherwise direct copy */
+  if (!ms_seedchan2xchan (xchan, chan))
   {
-    /* Map SEED channel to extended channel if possible, otherwise direct copy */
-    if (!ms_seedchan2xchan (xchan, chan))
-    {
-      chan = xchan;
-    }
-
-    while (*chan)
-    {
-      if ((sptr - sid) < sidlen)
-        *sptr++ = *chan;
-
-      chan++;
-      needed++;
-    }
+    chan = xchan;
   }
 
+  /* Channel code */
+  while (*chan)
+  {
+    if ((sptr - sid) < sidlen)
+      *sptr++ = *chan;
+    chan++;
+    needed++;
+  }
+
+  /* Terminate: at the end of the ID or end of the buffer */
   if ((sptr - sid) < sidlen)
     *sptr = '\0';
   else
     *--sptr = '\0';
 
-  if (needed >= sidlen)
+  /* A byte is needed for the terminator */
+  needed++;
+
+  if (needed > sidlen)
   {
-    ms_log (2, "Provided SID destination (%d bytes) is not big enough for the needed %d bytes\n", sidlen, needed);
+    ms_log (2, "Provided SID destination (%d bytes) is not big enough for the needed %d bytes\n",
+            sidlen, needed);
     return -1;
   }
 
-  return (sptr - sid);
+  return (int)(sptr - sid);
 } /* End of ms_nslc2sid() */
 
 /**********************************************************************/ /**
@@ -714,7 +745,7 @@ ms_doy2md (int year, int yday, int *month, int *mday)
 
   if (!month || !mday)
   {
-    ms_log (2, "Required argument not defined: 'month' or 'mday'\n");
+    ms_log (2, "%s(): Required input not defined: 'month' or 'mday'\n", __func__);
     return -1;
   }
 
@@ -768,7 +799,7 @@ ms_md2doy (int year, int month, int mday, int *yday)
 
   if (!yday)
   {
-    ms_log (2, "Required argument not defined: 'yday'\n");
+    ms_log (2, "%s(): Required input not defined: 'yday'\n", __func__);
     return -1;
   }
 
@@ -830,7 +861,7 @@ ms_nstime2time (nstime_t nstime, uint16_t *year, uint16_t *yday,
 {
   struct tm tms;
   int64_t isec;
-  int ifract;
+  int32_t ifract;
 
   /* Reduce to Unix/POSIX epoch time and fractional seconds */
   isec   = MS_NSTIME2EPOCH (nstime);
@@ -843,8 +874,9 @@ ms_nstime2time (nstime_t nstime, uint16_t *year, uint16_t *yday,
     ifract = NSTMODULUS - (-ifract);
   }
 
-  if (!(ms_gmtime64_r (&isec, &tms)))
-    return -1;
+  if (year || yday || hour || min || sec)
+    if (!(ms_gmtime64_r (&isec, &tms)))
+      return -1;
 
   if (year)
     *year = tms.tm_year + 1900;
@@ -874,7 +906,7 @@ ms_nstime2time (nstime_t nstime, uint16_t *year, uint16_t *yday,
  * in ISO 8601 and SEED formats.
  *
  * The provided \a timestr buffer must have enough room for the
- * resulting time string, a maximum of 30 characters.
+ * resulting time string, a maximum of 36 characters + terminating NULL.
  *
  * The \a subseconds flag controls whether the subsecond portion of
  * the time is included or not.  The value of \a subseconds is ignored
@@ -907,7 +939,7 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
 
   if (!timestr)
   {
-    ms_log (2, "Required argument not defined: 'timestr'\n");
+    ms_log (2, "%s(): Required input not defined: 'timestr'\n", __func__);
     return NULL;
   }
 
@@ -928,8 +960,9 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
   submicro = nanosec - (microsec * 1000);
 
   /* Calculate date-time parts if needed by format */
-  if (timeformat == ISOMONTHDAY ||
-      timeformat == ISOMONTHDAY_SPACE ||
+  if (timeformat == ISOMONTHDAY || timeformat == ISOMONTHDAY_Z ||
+      timeformat == ISOMONTHDAY_DOY || timeformat == ISOMONTHDAY_DOY_Z ||
+      timeformat == ISOMONTHDAY_SPACE || timeformat == ISOMONTHDAY_SPACE_Z ||
       timeformat == SEEDORDINAL)
   {
     if (!(ms_gmtime64_r (&isec, &tms)))
@@ -948,26 +981,38 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
     switch (timeformat)
     {
     case ISOMONTHDAY:
+    case ISOMONTHDAY_Z:
     case ISOMONTHDAY_SPACE:
-      expected = 19;
-      printed  = snprintf (timestr, 20, "%4d-%02d-%02d%c%02d:%02d:%02d",
-                          tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
-                          (timeformat == ISOMONTHDAY) ? 'T' : ' ',
-                          tms.tm_hour, tms.tm_min, tms.tm_sec);
+    case ISOMONTHDAY_SPACE_Z:
+      expected = (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? 20 : 19;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02d%c%02d:%02d:%02d%s",
+                           tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
+                          (timeformat == ISOMONTHDAY_SPACE || timeformat == ISOMONTHDAY_SPACE_Z) ? ' ' : 'T',
+                           tms.tm_hour, tms.tm_min, tms.tm_sec,
+                          (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? "Z" : "");
+      break;
+    case ISOMONTHDAY_DOY:
+    case ISOMONTHDAY_DOY_Z:
+      expected = (timeformat == ISOMONTHDAY_DOY_Z) ? 26 : 25;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02dT%02d:%02d:%02d%s (%03d)",
+                           tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
+                           tms.tm_hour, tms.tm_min, tms.tm_sec,
+                          (timeformat == ISOMONTHDAY_DOY_Z) ? "Z" : "",
+                          tms.tm_yday + 1);
       break;
     case SEEDORDINAL:
       expected = 17;
-      printed  = snprintf (timestr, 18, "%4d,%03d,%02d:%02d:%02d",
-                          tms.tm_year + 1900, tms.tm_yday + 1,
-                          tms.tm_hour, tms.tm_min, tms.tm_sec);
+      printed  = snprintf (timestr, expected + 1, "%4d,%03d,%02d:%02d:%02d",
+                           tms.tm_year + 1900, tms.tm_yday + 1,
+                           tms.tm_hour, tms.tm_min, tms.tm_sec);
       break;
     case UNIXEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64, rawisec);
+      printed  = snprintf (timestr, 22, "%" PRId64, rawisec);
       break;
     case NANOSECONDEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64, nstime);
+      printed  = snprintf (timestr, 22, "%" PRId64, nstime);
       break;
     }
   }
@@ -976,30 +1021,42 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
            (subseconds == MICRO_NONE && microsec) ||
            (subseconds == NANO_MICRO && submicro == 0) ||
            (subseconds == NANO_MICRO_NONE && submicro == 0))
-    {
+  {
     switch (timeformat)
     {
     case ISOMONTHDAY:
+    case ISOMONTHDAY_Z:
     case ISOMONTHDAY_SPACE:
-      expected = 26;
-      printed  = snprintf (timestr, 27, "%4d-%02d-%02d%c%02d:%02d:%02d.%06d",
+    case ISOMONTHDAY_SPACE_Z:
+      expected = (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? 27 : 26;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02d%c%02d:%02d:%02d.%06d%s",
                            tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
-                           (timeformat == ISOMONTHDAY) ? 'T' : ' ',
-                           tms.tm_hour, tms.tm_min, tms.tm_sec, microsec);
+                          (timeformat == ISOMONTHDAY_SPACE || timeformat == ISOMONTHDAY_SPACE_Z) ? ' ' : 'T',
+                           tms.tm_hour, tms.tm_min, tms.tm_sec, microsec,
+                          (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? "Z" : "");
+      break;
+    case ISOMONTHDAY_DOY:
+    case ISOMONTHDAY_DOY_Z:
+      expected = (timeformat == ISOMONTHDAY_DOY_Z) ? 33 : 32;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02dT%02d:%02d:%02d.%06d%s (%03d)",
+                           tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
+                           tms.tm_hour, tms.tm_min, tms.tm_sec, microsec,
+                          (timeformat == ISOMONTHDAY_DOY_Z) ? "Z" : "",
+                          tms.tm_yday + 1);
       break;
     case SEEDORDINAL:
       expected = 24;
-      printed  = snprintf (timestr, 25, "%4d,%03d,%02d:%02d:%02d.%06d",
+      printed  = snprintf (timestr, expected + 1, "%4d,%03d,%02d:%02d:%02d.%06d",
                            tms.tm_year + 1900, tms.tm_yday + 1,
                            tms.tm_hour, tms.tm_min, tms.tm_sec, microsec);
       break;
     case UNIXEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64".%06d", rawisec, rawnanosec / 1000);
+      printed  = snprintf (timestr, 22, "%" PRId64 ".%06d", rawisec, rawnanosec / 1000);
       break;
     case NANOSECONDEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64, nstime);
+      printed  = snprintf (timestr, 22, "%" PRId64, nstime);
       break;
     }
   }
@@ -1012,12 +1069,24 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
     switch (timeformat)
     {
     case ISOMONTHDAY:
+    case ISOMONTHDAY_Z:
     case ISOMONTHDAY_SPACE:
-      expected = 29;
-      printed  = snprintf (timestr, 30, "%4d-%02d-%02d%c%02d:%02d:%02d.%09d",
+    case ISOMONTHDAY_SPACE_Z:
+      expected = (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? 30 : 29;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02d%c%02d:%02d:%02d.%09d%s",
                            tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
-                           (timeformat == ISOMONTHDAY) ? 'T' : ' ',
-                           tms.tm_hour, tms.tm_min, tms.tm_sec, nanosec);
+                          (timeformat == ISOMONTHDAY_SPACE || timeformat == ISOMONTHDAY_SPACE_Z) ? ' ' : 'T',
+                           tms.tm_hour, tms.tm_min, tms.tm_sec, nanosec,
+                          (timeformat == ISOMONTHDAY_Z || timeformat == ISOMONTHDAY_SPACE_Z) ? "Z" : "");
+      break;
+    case ISOMONTHDAY_DOY:
+    case ISOMONTHDAY_DOY_Z:
+      expected = (timeformat == ISOMONTHDAY_DOY_Z) ? 36 : 35;
+      printed  = snprintf (timestr, expected + 1, "%4d-%02d-%02dT%02d:%02d:%02d.%09d%s (%03d)",
+                           tms.tm_year + 1900, tms.tm_mon + 1, tms.tm_mday,
+                           tms.tm_hour, tms.tm_min, tms.tm_sec, nanosec,
+                          (timeformat == ISOMONTHDAY_DOY_Z) ? "Z" : "",
+                          tms.tm_yday + 1);
       break;
     case SEEDORDINAL:
       expected = 27;
@@ -1027,11 +1096,11 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
       break;
     case UNIXEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64".%09d", rawisec, rawnanosec);
+      printed  = snprintf (timestr, 22, "%" PRId64 ".%09d", rawisec, rawnanosec);
       break;
     case NANOSECONDEPOCH:
       expected = -1;
-      printed  = snprintf (timestr, 22, "%"PRId64, nstime);
+      printed  = snprintf (timestr, 22, "%" PRId64, nstime);
       break;
     }
   }
@@ -1039,12 +1108,11 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
   else
   {
     ms_log (2, "Unhandled combination of timeformat and subseconds, please report!\n");
-    ms_log (2, "   nstime: %"PRId64", isec: %"PRId64", nanosec: %d, mirosec: %d, submicro: %d\n",
+    ms_log (2, "   nstime: %" PRId64 ", isec: %" PRId64 ", nanosec: %d, mirosec: %d, submicro: %d\n",
             nstime, isec, nanosec, microsec, submicro);
     ms_log (2, "   timeformat: %d, subseconds: %d\n", (int)timeformat, (int)subseconds);
     return NULL;
   }
-
 
   if (expected == 0 || (expected > 0 && printed != expected))
   {
@@ -1058,11 +1126,10 @@ ms_nstime2timestr (nstime_t nstime, char *timestr,
 /**********************************************************************/ /**
  * @brief Convert an ::nstime_t to a time string with 'Z' suffix
  *
- * This is a wrapper for ms_nstime2timestr() that includes a 'Z'
- * suffix to denote UTC time.
+ * @deprecated This function should be replaced with desired use of
+ * timeformat values with the '_Z' designator.
  *
- * The provided \a timestr buffer must have enough room for the
- * resulting time string, a maximum of 31 characters.
+ * This function is a thin wrapper of @ref ms_nstime2timestr
  *
  * @param[in] nstime Time value to convert
  * @param[out] timestr Buffer for ISO time string
@@ -1077,20 +1144,14 @@ char *
 ms_nstime2timestrz (nstime_t nstime, char *timestr,
                     ms_timeformat_t timeformat, ms_subseconds_t subseconds)
 {
-  char *formatted;
+  if (timeformat == ISOMONTHDAY)
+    timeformat = ISOMONTHDAY_Z;
+  else if (timeformat == ISOMONTHDAY_DOY)
+    timeformat = ISOMONTHDAY_DOY_Z;
+  else if (timeformat == ISOMONTHDAY_SPACE)
+    timeformat = ISOMONTHDAY_SPACE_Z;
 
-  formatted = ms_nstime2timestr (nstime, timestr, timeformat, subseconds);
-
-  if (formatted)
-  {
-    /* Append (UTC) Z suffix */
-    while (*formatted)
-      formatted++;
-    *formatted++ = 'Z';
-    *formatted   = '\0';
-  }
-
-  return formatted;
+  return ms_nstime2timestr (nstime, timestr, timeformat, subseconds);
 } /* End of ms_nstime2timestrz() */
 
 /***************************************************************************
@@ -1231,7 +1292,7 @@ ms_timestr2nstime (const char *timestr)
 
   if (!timestr)
   {
-    ms_log (2, "Required argument not defined: 'timestr'\n");
+    ms_log (2, "%s(): Required input not defined: 'timestr'\n", __func__);
     return NSTERROR;
   }
 
@@ -1284,7 +1345,7 @@ ms_timestr2nstime (const char *timestr)
     }
   }
 
-  length = cp - timestr;
+  length = (int)(cp - timestr);
 
   /* If the time string is all number-like characters assume it is an epoch time.
    * Unless it is 4 characters, which could be a year, unless it starts with a sign. */
@@ -1371,19 +1432,19 @@ nstime_t
 ms_mdtimestr2nstime (const char *timestr)
 {
   int fields;
-  int year    = 0;
-  int mon     = 1;
-  int mday    = 1;
-  int yday    = 1;
-  int hour    = 0;
-  int min     = 0;
-  int sec     = 0;
-  double fsec = 0.0;
-  int nsec    = 0;
+  int year      = 0;
+  int mon       = 1;
+  int mday      = 1;
+  int yday      = 1;
+  int hour      = 0;
+  int min       = 0;
+  int sec       = 0;
+  double fsec   = 0.0;
+  uint32_t nsec = 0;
 
   if (!timestr)
   {
-    ms_log (2, "Required argument not defined: 'timestr'\n");
+    ms_log (2, "%s(): Required input not defined: 'timestr'\n", __func__);
     return NSTERROR;
   }
 
@@ -1393,7 +1454,7 @@ ms_mdtimestr2nstime (const char *timestr)
   /* Convert fractional seconds to nanoseconds */
   if (fsec != 0.0)
   {
-    nsec = (int)(fsec * 1000000000.0 + 0.5);
+    nsec = (uint32_t)(fsec * 1000000000.0 + 0.5);
   }
 
   if (fields < 1)
@@ -1440,7 +1501,7 @@ ms_mdtimestr2nstime (const char *timestr)
 
   if (!VALIDNANOSEC (nsec))
   {
-    ms_log (2, "fractional second (%d) is out of range\n", nsec);
+    ms_log (2, "fractional second (%u) is out of range\n", nsec);
     return NSTERROR;
   }
 
@@ -1479,17 +1540,17 @@ nstime_t
 ms_seedtimestr2nstime (const char *seedtimestr)
 {
   int fields;
-  int year    = 0;
-  int yday    = 1;
-  int hour    = 0;
-  int min     = 0;
-  int sec     = 0;
-  double fsec = 0.0;
-  int nsec    = 0;
+  int year      = 0;
+  int yday      = 1;
+  int hour      = 0;
+  int min       = 0;
+  int sec       = 0;
+  double fsec   = 0.0;
+  uint32_t nsec = 0;
 
   if (!seedtimestr)
   {
-    ms_log (2, "Required argument not defined: 'seedtimestr'\n");
+    ms_log (2, "%s(): Required input not defined: 'seedtimestr'\n", __func__);
     return NSTERROR;
   }
 
@@ -1499,7 +1560,7 @@ ms_seedtimestr2nstime (const char *seedtimestr)
   /* Convert fractional seconds to nanoseconds */
   if (fsec != 0.0)
   {
-    nsec = (int)(fsec * 1000000000.0 + 0.5);
+    nsec = (uint32_t)(fsec * 1000000000.0 + 0.5);
   }
 
   if (fields < 1)
@@ -1540,7 +1601,7 @@ ms_seedtimestr2nstime (const char *seedtimestr)
 
   if (!VALIDNANOSEC (nsec))
   {
-    ms_log (2, "fractional second (%d) is out of range\n", nsec);
+    ms_log (2, "fractional second (%u) is out of range\n", nsec);
     return NSTERROR;
   }
 
@@ -1673,9 +1734,9 @@ ms_readleapseconds (const char *envvarname)
  *
  * Leap seconds are loaded into the library's global leapsecond list.
  *
- * The file is expected to be standard IETF leap second list format.
- * The list is usually available from:
- * https://www.ietf.org/timezones/data/leap-seconds.list
+ * The file is expected to be in NTP leap second list format. Some locations
+ * where this file can be obtained are indicated in RFC 8633 section 3.7:
+ * https://www.rfc-editor.org/rfc/rfc8633.html#section-3.7
  *
  * @param[in] filename File containing leap second list
  *
@@ -1700,7 +1761,7 @@ ms_readleapsecondfile (const char *filename)
 
   if (!filename)
   {
-    ms_log (2, "Required argument not defined: 'filename'\n");
+    ms_log (2, "%s(): Required input not defined: 'filename'\n", __func__);
     return -1;
   }
 
@@ -1708,6 +1769,12 @@ ms_readleapsecondfile (const char *filename)
   {
     ms_log (2, "Cannot open leap second file %s: %s\n", filename, strerror (errno));
     return -1;
+  }
+
+  /* Detatch embedded leap second list */
+  if (leapsecondlist == &embedded_leapsecondlist[0])
+  {
+    leapsecondlist = NULL;
   }
 
   /* Free existing leapsecondlist */

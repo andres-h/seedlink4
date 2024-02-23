@@ -1,5 +1,5 @@
 /***************************************************************************
- * Interface declarations for routines in fio.c
+ * Interface declarations for the extra header routines in extraheaders.c
  *
  * This file is part of the miniSEED Library.
  *
@@ -18,24 +18,30 @@
  * limitations under the License.
  ***************************************************************************/
 
-#ifndef MSIO_H
-#define MSIO_H 1
+#ifndef EXTRAHEADERS_H
+#define EXTRAHEADERS_H 1
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "libmseed.h"
+#include "yyjson.h"
 
-extern int msio_fopen (LMIO *io, const char *path, const char *mode,
-                       int64_t *startoffset, int64_t *endoffset);
-extern int msio_fclose (LMIO *io);
-extern size_t msio_fread (LMIO *io, void *buffer, size_t size);
-extern int msio_feof (LMIO *io);
-extern int msio_url_useragent (const char *program, const char *version);
-extern int msio_url_userpassword (const char *userpassword);
-extern int msio_url_addheader (const char *header);
-extern void msio_url_freeheaders (void);
+/* Avoid unused parameter warnings in known cases */
+#define UNUSED(x) (void)(x)
+
+/* Private allocation wrappers for yyjson's allocator definition */
+void *_priv_malloc(void *ctx, size_t size);
+void *_priv_realloc(void *ctx, void *ptr, size_t oldsize, size_t size);
+void _priv_free(void *ctx, void *ptr);
+
+/* Internal structure for holding parsed JSON extra headers */
+struct LM_PARSED_JSON_s
+{
+  yyjson_doc *doc;
+  yyjson_mut_doc *mut_doc;
+};
 
 #ifdef __cplusplus
 }
