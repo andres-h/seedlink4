@@ -774,7 +774,10 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 	 		return;
 		}
 
-		if ( tokLen != 2 || strncasecmp(tok, "-1", tokLen) != 0 ) {
+		if ( strncasecmp(tok, "ALL", tokLen) == 0 ) {
+			_currentStation->setSequence(0);
+		}
+		else {
 			if ( _wildcard ) {
 				// wildcards can only occur with _slproto >= 4.0
 				sendResponse("ERROR ARGUMENTS using sequence number with wildcard is not supported\r\n");
