@@ -11,7 +11,7 @@ int main() {
 
 	ms_loginit (print_stderr, NULL, print_stderr, NULL);
 
-	if ( (err = ms3_readmsr (&msr, "/dev/stdin", NULL, NULL, 0, 0)) < 0 ) {
+	if ( (err = ms3_readmsr (&msr, "/dev/stdin", 0, 0)) < 0 ) {
 		fprintf(stderr, "%s\n", ms_errorstr(err));
 		return 1;
 	}

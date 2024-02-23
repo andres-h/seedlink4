@@ -15,7 +15,7 @@ int main() {
 
 	ms_loginit (print_stderr, NULL, print_stderr, NULL);
 
-	while ( (err = ms3_readmsr (&msr, "/dev/stdin", NULL, NULL, MSF_UNPACKDATA, 0)) == MS_NOERROR ) {
+	while ( (err = ms3_readmsr (&msr, "/dev/stdin", MSF_UNPACKDATA, 0)) == MS_NOERROR ) {
 		msr->formatversion = 3;
 		msr->reclen = -1;
 
