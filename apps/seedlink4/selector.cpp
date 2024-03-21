@@ -24,20 +24,13 @@ namespace Seedlink {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 bool Selector::initPattern(regex &r, const string &src, double slproto) {
-	if (slproto >= 4.0) {
-		if ( !regex_match(src, regex("[A-Z0-9_\\?\\*]*")) )
-			return false;
-	}
-	else {
-		if ( !regex_match(src, regex("[A-Z0-9\\-\\?]*")) )
-			return false;
-	}
+	if ( !regex_match(src, regex("[A-Z0-9_\\?\\*]*")) )
+		return false;
 
 	string s = regex_replace(src, regex("\\?"), ".");
+	s = regex_replace(s, regex("\\*"), ".*");
 
-	if ( slproto >= 4.0 )
-		s = regex_replace(s, regex("\\*"), ".*");
-	else
+	if ( slproto < 4.0 )
 		s = regex_replace(s, regex("-"), " ");
 
 	r = regex(s);
@@ -75,12 +68,15 @@ bool Selector::init(const string &selstr, double slproto) {
 		}
 	}
 	else {
-		string loc = "??";
+		if ( s.find('_') != string::npos || s.find('*') != string::npos )
+			return false;
+
+		string loc = "*";
 		string cha = "???";
 
 		if ( p != string::npos ) {
-			s = s.substr(0, p);
 			fmt = "2" + s.substr(p + 1);
+			s = s.substr(0, p);
 
 			if ( fmt.length() != 2 )
 				return false;

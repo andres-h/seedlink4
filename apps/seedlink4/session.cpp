@@ -632,8 +632,6 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			else {
 				_currentStation->select("", _slproto);
 			}
-
-			if ( !_batch ) sendResponse("OK\r\n");
 		}
 		else {
 			while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
