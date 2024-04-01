@@ -1,0 +1,34 @@
+SET(PACKAGE_NAME SL3PLUG)
+SET(APP_NAME sl3plug)
+
+SET(
+	${PACKAGE_NAME}_SOURCES
+		main.cc
+		iosystem.cc
+		sproc.cc
+		mseed.cc
+		steim1.cc
+		steim2.cc
+)
+
+
+INCLUDE_DIRECTORIES(${LIBXML2_INCLUDE_DIR})
+INCLUDE_DIRECTORIES(../../libs/slutils)
+INCLUDE_DIRECTORIES(../../libs/plugin)
+INCLUDE_DIRECTORIES(../../libs/3rd-party/libslink)
+INCLUDE_DIRECTORIES(../../libs/3rd-party/libmseed3)
+
+ADD_DEFINITIONS(-DSYSLOG_FACILITY=LOG_LOCAL0 -DMSEED_ROUND_TENTH_MILLISEC)
+
+SC_INSTALL_INIT(${APP_NAME} config/init.py)
+SC_ADD_EXECUTABLE(${PACKAGE_NAME} ${APP_NAME})
+SC_ADD_VERSION(${PACKAGE_NAME} ${APP_NAME})
+
+TARGET_LINK_LIBRARIES(
+	${APP_NAME}
+		${LIBXML2_LIBRARIES}
+		slutils
+		slplugin
+		mseed3
+)
+

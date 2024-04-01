@@ -1,1 +1,1 @@
-SUBDIRS(seedlink4)
+SUBDIRS(seedlink4 sl3plug)
