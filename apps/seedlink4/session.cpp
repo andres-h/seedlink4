@@ -413,7 +413,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
 				stationPattern = string(tok, tokLen);
 
-				if ( !regex_match(stationPattern, regex("[A-Z0-9\\?\\*]*")) ) {
+				if ( !regex_match(stationPattern, regex("[A-Z0-9_\\?\\*]*")) ) {
 					infoError("ARGUMENTS", "invalid station pattern");
 					return;
 				}
@@ -421,7 +421,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 				if ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
 					streamPattern = string(tok, tokLen);
 
-					if ( !regex_match(streamPattern, regex("[A-Z0-9\\?\\*\\.]*")) ) {
+					if ( !regex_match(streamPattern, regex("[A-Z0-9_\\?\\*\\.]*")) ) {
 						infoError("ARGUMENTS", "invalid stream pattern");
 						return;
 					}
@@ -900,11 +900,15 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, 
 		regex streamRegex;
 
 		if ( _slproto >= 4.0 ) {
+			string streamPatternEx = (streamPattern.find('.') == string::npos) ?
+				streamPattern + ".*" :
+				streamPattern;
+
 			stationRegex = regex(regex_replace(regex_replace(stationPattern,
 									 regex("\\?"), "."),
 							   regex("\\*"), ".*"));
 
-			streamRegex = regex(regex_replace(regex_replace(regex_replace(stationPattern,
+			streamRegex = regex(regex_replace(regex_replace(regex_replace(streamPatternEx,
 										      regex("\\."), "\\."),
 									regex("\\?"), "."),
 							  regex("\\*"), ".*"));
