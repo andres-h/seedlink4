@@ -475,6 +475,7 @@ bool StationIO::flush(int fd)
           {
             logs(LOG_ERR) << station_key << ": " << ms_errorstr(err) << endl;
             buf = buf->next();
+            if (msr) msr3_free(&msr);
             continue;
           }
 
@@ -518,6 +519,7 @@ bool StationIO::flush(int fd)
               msr->formatversion << endl;
 
             buf = buf->next();
+            msr3_free(&msr);
             continue;
           }
 
@@ -531,6 +533,7 @@ bool StationIO::flush(int fd)
         if(subformat != 'D')
           {
             buf = buf->next();
+            msr3_free(&msr);
             continue;
           }
 
