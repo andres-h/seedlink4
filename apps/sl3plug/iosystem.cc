@@ -524,6 +524,7 @@ bool StationIO::flush(int fd)
         if(send_packet(fd, buf->data(), buf->size, '2', subformat) < 0)
           {
             logs(LOG_ERR) << strerror(errno) << endl;
+            msr3_free(&msr);
             return false;
           }
 
@@ -556,10 +557,12 @@ bool StationIO::flush(int fd)
         if(h.err < 0)
           {
             logs(LOG_ERR) << strerror(errno) << endl;
+            msr3_free(&msr);
             return false;
           }
 
         buf = buf->next();
+        msr3_free(&msr);
       }
 
     return true;
