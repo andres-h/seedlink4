@@ -47,8 +47,8 @@ void StreamInfo::serialize(Core::Archive &ar) {
 
 		string seedname = ch.substr(0, 1) + ch.substr(2, 1) + ch.substr(4, 1);
 		string type(_stream->_format, 1, 1);
-		string starttime = _stream->_starttime.toString("%F %T.%4f");
-		string endtime = _stream->_endtime.toString("%F %T.%4f");
+		string starttime = _stream->_starttime.toString("%Y/%m/%d %T.%4f");
+		string endtime = _stream->_endtime.toString("%Y/%m/%d %T.%4f");
 		ar & NAMED_OBJECT_HINT("location", location, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("seedname", seedname, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("type", type, ARCHIVE_FLAGS);
