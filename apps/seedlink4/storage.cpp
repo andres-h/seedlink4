@@ -75,7 +75,10 @@ void Cursor::setSequence(Sequence seq, double slproto) {
 			if ( _seq > _owner.sequence() )
 				_seq -= 0x1000000;
 		}
-		else if ( seq > _owner.sequence() ) {
+		else {
+			_seq = seq;
+			
+			if ( _seq > _owner.sequence() )
 				_seq = _owner.sequence();
 		}
 	}
