@@ -985,7 +985,8 @@ void SeedlinkSession::sendJSON(InfoPtr info, const char *code) {
 	header.append("SEJ", 3);
 	header.append(code);
 	header.append((char *)&length, 4); // TODO: byteorder
-	header.append("\0\0\0\0\0\0\0\0", 8);
+	header.append("\0\0\0\0\0\0\0\0", 8); // sequence number = 0
+	header.append("\0", 1); // length of station ID = 0
 	send(header.data(), header.size());
 	send(data.data(), data.size());
 }
