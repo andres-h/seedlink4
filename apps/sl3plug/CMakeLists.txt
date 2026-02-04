@@ -15,8 +15,7 @@ SET(
 INCLUDE_DIRECTORIES(${LIBXML2_INCLUDE_DIR})
 INCLUDE_DIRECTORIES(../../libs/slutils)
 INCLUDE_DIRECTORIES(../../libs/plugin)
-INCLUDE_DIRECTORIES(../../libs/3rd-party/libslink)
-INCLUDE_DIRECTORIES(../../libs/3rd-party/libmseed3)
+INCLUDE_DIRECTORIES(../../../../system/libs/3rd-party/libmseed)
 
 ADD_DEFINITIONS(-DSYSLOG_FACILITY=LOG_LOCAL0 -DMSEED_ROUND_TENTH_MILLISEC)
 
@@ -29,6 +28,6 @@ TARGET_LINK_LIBRARIES(
 		${LIBXML2_LIBRARIES}
 		slutils
 		slplugin
-		mseed3
+		mseed
 )
 

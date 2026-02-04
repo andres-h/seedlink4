@@ -35,7 +35,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "libslink.h"
+#include "fsdh.h"
 #include "libmseed.h"
 
 #include "iosystem.h"

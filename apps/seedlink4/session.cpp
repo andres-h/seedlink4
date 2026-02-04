@@ -227,7 +227,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		void startTransfer();
 		void stopTransfer();
 		void collectData();
-		void outboxFlushed() override;
+		void buffersFlushed() override;
 		void cursorAvail(CursorPtr c, Sequence seq);
 };
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -1271,7 +1271,7 @@ void SeedlinkSession::startTransfer() {
 	_cursorIter = _cursorsAvail.begin();
 	_transfer = true;
 
-	if ( !inAvail() && !_cursorsAvail.empty() )
+	if ( !outputBufferSize() && !_cursorsAvail.empty() )
 		collectData();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -1344,7 +1344,7 @@ void SeedlinkSession::collectData() {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void SeedlinkSession::outboxFlushed() {
+void SeedlinkSession::buffersFlushed() {
 	if ( _transfer && !_cursors.empty() )
 		collectData();
 }
@@ -1357,7 +1357,7 @@ void SeedlinkSession::outboxFlushed() {
 void SeedlinkSession::cursorAvail(CursorPtr c, Sequence seq) {
 	_cursorsAvail.insert(c);
 
-	if ( _transfer && !inAvail() )
+	if ( _transfer && !outputBufferSize() )
 		collectData();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

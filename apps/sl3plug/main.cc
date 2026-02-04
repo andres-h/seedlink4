@@ -38,7 +38,7 @@
 #include <getopt.h>
 #endif
 
-#include "libslink.h"
+#include "fsdh.h"
 #include "qtime.h"
 
 #include "conf_ini.h"

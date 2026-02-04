@@ -18,8 +18,7 @@
 #include <netinet/in.h>
 
 #include "qtime.h"
-
-#include "libslink.h"
+#include "fsdh.h"
 
 #include "buffer.h"
 #include "mseed.h"
