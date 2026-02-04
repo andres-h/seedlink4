@@ -1,0 +1,3 @@
+[submodule "libs/3rd-party/libslink4"]
+	path = libs/3rd-party/libslink4
+	url = https://github.com/EarthScope/libslink.git

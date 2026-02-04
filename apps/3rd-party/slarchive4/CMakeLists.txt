@@ -1,0 +1,14 @@
+SUBDIRS(src)
+
+SC_INSTALL_INIT(slarchive4 config/slarchive4.py)
+INSTALL(FILES config/slarchive4.cfg DESTINATION ${SC3_PACKAGE_CONFIG_DIR})
+
+INSTALL(
+	DIRECTORY templates/
+	DESTINATION ${SC3_PACKAGE_SHARE_DIR}/templates/slarchive
+	PATTERN ".svn" EXCLUDE
+	PATTERN "CMakeLists.txt" EXCLUDE
+)
+
+FILE(GLOB descs "${CMAKE_CURRENT_SOURCE_DIR}/descriptions/*.xml")
+INSTALL(FILES ${descs} DESTINATION ${SC3_PACKAGE_APP_DESC_DIR})
