@@ -107,11 +107,11 @@ class StreamDescriptor
   public:
     const string location;
     const string seedname;
-    const int type;
+    const char type;
 
     StreamDescriptor(): type(-1) {}
 
-    StreamDescriptor(const string &loc, const string &name, int typ):
+    StreamDescriptor(const string &loc, const string &name, char typ):
       location(loc), seedname(name), type(typ) {}
 
     StreamDescriptor &operator=(const StreamDescriptor &str_desc)
@@ -171,19 +171,7 @@ class StreamDescriptor
 
     string to_string() const
       {
-        string stype;
-        switch(type)
-          {
-          case SLDATA: stype = "D"; break;
-          case SLDET: stype = "E"; break;
-          case SLTIM: stype = "T"; break;
-          case SLCAL: stype = "C"; break;
-          case SLMSG: stype = "L"; break;
-          case SLBLK: stype = "O"; break;
-          default: stype = "X";
-          }
-
-        return (location + "." + seedname + "." + stype);
+        return (location + "." + seedname + "." + string(type, 1));
       }
   };
 

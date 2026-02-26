@@ -32,31 +32,6 @@
 extern "C" {
 #endif
 
-#define SLRECSIZE           512      /* Default Mini-SEED record size */
-#define MAX_HEADER_SIZE     128      /* Max record header size */
-#define SLHEADSIZE          8        /* SeedLink header size */
-#define SELSIZE             8        /* Maximum selector size */
-#define BUFSIZE             8192     /* Size of receiving buffer */
-#define SIGNATURE           "SL"     /* SeedLink header signature */
-#define INFOSIGNATURE       "SLINFO" /* SeedLink INFO packet signature */
-#define MAX_LOG_MSG_LENGTH  200      /* Maximum length of log messages */
-
-/* SeedLink packet types */
-#define SLDATA 0     /* waveform data record */
-#define SLDET  1     /* detection record */
-#define SLCAL  2     /* calibration record */
-#define SLTIM  3     /* timing record */
-#define SLMSG  4     /* message record */
-#define SLBLK  5     /* general record */
-#define SLNUM  6     /* used as the error indicator (same as SLCHA) */
-#define SLCHA  6     /* for requesting channel info or detectors */
-#define SLINF  7     /* a non-terminating XML formatted message in a miniSEED
-			log record, used for INFO responses */
-#define SLINFT 8     /* a terminating XML formatted message in a miniSEED log
-			record, used for INFO responses */
-#define SLKEEP 9     /* an XML formatted message in a miniSEED log
-			record, used for keepalive/heartbeat responses */
-
 /* SEED structures */
 
 /* Portability to the XScale (ARM) architecture requires a packed

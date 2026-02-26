@@ -35,8 +35,10 @@
 #endif
 
 #include "qtime.h"
+#include "fsdh.h"
 
 #include "libslink.h"
+#include "libmseed.h"
 
 #include "confbase.h"
 #include "conf_xml.h"
@@ -50,7 +52,8 @@
 
 #include "schedule.h"
 
-#define MYVERSION "2.1 (2024.298)"
+#define MYPACKAGE "chain4_plugin"
+#define MYVERSION "4.0 (2026.XXX)"
 
 #ifndef CONFIG_FILE
 #define CONFIG_FILE "/home/sysop/config/chain.xml"
@@ -69,7 +72,8 @@ using namespace Utilities;
 namespace {
 
 const int POLL_USEC           = 1000000;
-const int MAX_SAMPLES         = ((SLRECSIZE - 64) * 2);
+const int PLBUFFERSIZE        = 16384;
+const int MAX_SAMPLES         = (PLBUFFERSIZE * 2);
 const int SHUTDOWN_WAIT       = 10;
 const int WRITE_TIMEOUT       = 600;
 const int REGEX_ERRLEN        = 100;
@@ -156,39 +160,6 @@ void get_id(const sl_fsdh_s *fsdh, string &net, string &sta, string &loc,
             chn = string(fsdh->channel, n);
             break;
           }
-  }
-
-int packet_type2int(const char *type)
-  {
-    if(type == NULL) return SLNUM;
-    else if(strlen(type) != 1) return -1;
-
-    switch(toupper(*type))
-      {
-        case 'D': return SLDATA;
-        case 'E': return SLDET;
-        case 'T': return SLTIM;
-        case 'C': return SLCAL;
-        case 'L': return SLMSG;
-        case 'O': return SLBLK;
-      }
-
-    return -1;
-  }
-
-const char *packet_type2string(int type)
-  {
-    switch(type)
-      {
-        case SLDATA: return "D";
-        case SLDET: return "E";
-        case SLTIM: return "T";
-        case SLCAL: return "C";
-        case SLMSG: return "L";
-        case SLBLK: return "O";
-      }
-
-    return NULL;
   }
 
 //*****************************************************************************
@@ -442,7 +413,8 @@ class StreamPacket
   {
   public:
     INT_TIME it;
-    char data[SLRECSIZE];
+    uint64_t size;
+    char data[PLBUFFERSIZE];
   };
 
 class TriggerBuffer
@@ -472,7 +444,7 @@ class TriggerBuffer
     void set_trigger_off(int year, int month, int day,
       int hour, int minute, int second);
 
-    void push_packet(INT_TIME begin_time, void *pseed);
+    void push_packet(INT_TIME begin_time, char *plbuffer, uint32_t size);
   };
 
 void TriggerBuffer::set_trigger_on(int year, int month, int day,
@@ -507,7 +479,7 @@ void TriggerBuffer::set_trigger_on(int year, int month, int day,
             continue;
 
         int r = send_mseed(station_id.c_str(), packets.front()->data,
-          SLRECSIZE);
+          packets.front()->size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -545,7 +517,7 @@ void TriggerBuffer::set_trigger_off(int year, int month, int day,
     trigger_off_requested = true;
   }
 
-void TriggerBuffer::push_packet(INT_TIME begin_time, void *pseed)
+void TriggerBuffer::push_packet(INT_TIME begin_time, char *plbuffer, uint32_t size)
   {
     while(!packets.empty() &&
       int(tdiff(begin_time, packets.front()->it) / 1000000.0) > buffer_length)
@@ -553,7 +525,7 @@ void TriggerBuffer::push_packet(INT_TIME begin_time, void *pseed)
 
     if(trigger_on)
       {
-        int r = send_mseed(station_id.c_str(), pseed, SLRECSIZE);
+        int r = send_mseed(station_id.c_str(), plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -562,7 +534,8 @@ void TriggerBuffer::push_packet(INT_TIME begin_time, void *pseed)
       {
         StreamPacket* pack = new StreamPacket;
         pack->it = begin_time;
-        memcpy(pack->data, pseed, SLRECSIZE);
+        pack->size = size;
+        memcpy(pack->data, plbuffer, size);
         packets.push_back(pack);
       }
 
@@ -644,7 +617,8 @@ class Station
     void set_trigger_off(int year, int month, int day, int hour, int minute,
       int second);
 
-    void process_mseed(char *pseed, int packtype, int seq, int size);
+    void process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
+      char subformat, uint64_t seq);
   };
 
 Station::Station(const string &myid_init, const string &out_name_init,
@@ -792,12 +766,16 @@ void Station::set_trigger_off(int year, int month, int day, int hour,
         p->second->set_trigger_off(year, month, day, hour, minute, second);
   }
 
-void Station::process_mseed(char *pseed, int packtype, int seq, int size)
+void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
+    char subformat, uint64_t seq)
   {
     if(out_name.length() == 0)
         return;
 
-    sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(pseed);
+    if(msr->formatversion != 2)
+        return;
+
+    sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(plbuffer);
     int n;
 
     strncpy(fsdh->station, out_name.c_str(), STATLEN);
@@ -812,7 +790,7 @@ void Station::process_mseed(char *pseed, int packtype, int seq, int size)
 
     string net, sta, loc, chn;
     get_id(fsdh, net, sta, loc, chn);
-    StreamDescriptor strd(loc, chn, packtype);
+    StreamDescriptor strd(loc, chn, subformat);
 
     EXT_TIME et;
     et.year = htons(fsdh->start_time.year);
@@ -831,9 +809,10 @@ void Station::process_mseed(char *pseed, int packtype, int seq, int size)
     if(check_overlap(strd, recno, hdrtime))
         return;
 
-    if(packtype != SLDATA)
+    if(subformat != 'D')
       {
-        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + packet_type2string(packtype)).c_str(), seq, pseed, SLRECSIZE);
+        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
+            seq & 0xffffff, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -847,96 +826,114 @@ void Station::process_mseed(char *pseed, int packtype, int seq, int size)
     map<string, rc_ptr<TriggerBuffer> >::iterator p;
     if((p = trigger_map.find(srcname)) != trigger_map.end())
       {
-        p->second->push_packet(hdrtime, pseed);
+        p->second->push_packet(hdrtime, plbuffer, size);
       }
     else
       {
-        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + packet_type2string(packtype)).c_str(), seq, pseed, SLRECSIZE);
+        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
+            seq & 0xffffff, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
       }
 
     map<string, unpack_options>::iterator q;
-    if((q = unpack_map.find(srcname)) != unpack_map.end())
+    if((q = unpack_map.find(srcname)) == unpack_map.end())
+        return;
+
+    if(msr3_unpack_data(msr, 0) < 0)
       {
-        SLMSrecord* msr = sl_msr_new();
-        sl_msr_parse(NULL, pseed, &msr, 1, 1);
+        logs(LOG_ERR) << "error decoding miniSEED packet " <<
+          string(fsdh->sequence_number, 6) << ", "
+          "station " << net << "_" << sta << " (" << myid << "), "
+          "stream " << loc << "." << chn << ".D" << endl;
 
-        if(msr == NULL)
+        return;
+      }
+
+    if(msr->samplecnt < 0 || msr->samplecnt > MAX_SAMPLES)
+      {
+        logs(LOG_ERR) << "invalid sample count (" << msr->samplecnt << ") "
+          "of miniSEED record " << string(fsdh->sequence_number, 6) << ", "
+          "station " << net << "_" << sta << " (" << myid << "), "
+          "stream " << loc << "." << chn << ".D" << endl;
+
+        return;
+      }
+
+    if(msr->samplecnt == 0)
+      {
+        // not a data record
+        return;
+      }
+
+    int64_t tq = default_timing_quality;
+
+    if(mseh_exists(msr, "FDSN.Time.Quality"))
+      {
+        int r = mseh_get_int64(msr, "FDSN.Time.Quality", &tq);
+
+        if (r < 0 || r > 1 || tq < 0 || tq > 100)
           {
-            logs(LOG_ERR) << "error decoding Mini-SEED packet " <<
+            logs(LOG_WARNING) << "invalid timing quality ";
+
+            if(r == 0) logs(LOG_WARNING) << "(" << tq << ") ";
+
+            logs(LOG_WARNING) << " of miniSEED record " <<
               string(fsdh->sequence_number, 6) << ", "
               "station " << net << "_" << sta << " (" << myid << "), "
               "stream " << loc << "." << chn << ".D" << endl;
 
-            return;
+            tq = default_timing_quality;
           }
+      }
 
-        if(msr->numsamples < 0 || msr->numsamples > MAX_SAMPLES)
+    int32_t samples[2 * MAX_SAMPLES];
+    int samplesize = ms_samplesize(msr->sampletype);
+
+    for(int i = 0; i < msr->samplecnt; ++i)
+      {
+        void *sptr = (char *)msr->datasamples + (i * samplesize);
+        int32_t sample;
+
+        if(msr->sampletype == 'i')
           {
-            logs(LOG_ERR) << "error decoding Mini-SEED packet " <<
-              string(fsdh->sequence_number, 6) << ", "
-              "station " << net << "_" << sta << " (" << myid << "), "
-              "stream " << loc << "." << chn << ".D" << endl;
-
-            sl_msr_free(&msr);
-            return;
+            sample = *(int32_t *)sptr;
           }
-
-        if(msr->numsamples == 0)
+        else if(msr->sampletype == 'f')
           {
-            // not a data record
-            sl_msr_free(&msr);
-            return;
+            sample = *(float *)sptr;
           }
-
-        int timing_quality = default_timing_quality, usec99 = 0;
-
-        if(msr->Blkt1001 != NULL)
+        else if(msr->sampletype == 'd')
           {
-            timing_quality = msr->Blkt1001->timing_qual;
-            usec99 = msr->Blkt1001->usec;
-          }
-
-        struct ptime pt;
-        pt.year = ntohs(fsdh->start_time.year);
-        pt.yday = ntohs(fsdh->start_time.day);
-        pt.hour = fsdh->start_time.hour;
-        pt.minute = fsdh->start_time.min;
-        pt.second = fsdh->start_time.sec;
-        pt.usec = ntohs(fsdh->start_time.fract) * 100 + usec99;
-
-        int r = 0;
-        if(q->second.double_rate)
-          {
-            int32_t datasamples[2 * MAX_SAMPLES];
-
-            for(int i = 0; i < msr->numsamples; ++i)
-              {
-                datasamples[i << 1] = msr->datasamples[i] << 1;
-                datasamples[(i << 1) + 1] = 0;
-              }
-
-            r = send_raw3(myid.c_str(), q->second.dest_channel.c_str(), &pt,
-              ntohs(fsdh->time_correct), timing_quality, datasamples,
-              2 * msr->numsamples);
+            sample = *(double *)sptr;
           }
         else
           {
-            r = send_raw3(myid.c_str(), q->second.dest_channel.c_str(), &pt,
-              ntohs(fsdh->time_correct), timing_quality, msr->datasamples,
-              msr->numsamples);
+            logs(LOG_ERR) << "invalid sample type (" << msr->sampletype << ") "
+              "of miniSEED record " << string(fsdh->sequence_number, 6) << ", "
+              "station " << net << "_" << sta << " (" << myid << "), "
+              "stream " << loc << "." << chn << ".D" << endl;
+
+            return;
           }
 
-        sl_msr_free(&msr);
-
-        DEBUG_MSG("sent " << r << " bytes of data, station \"" << myid <<
-          "\", channel \"" << q->second << "\"" << endl);
-
-        if(r < 0) throw PluginBrokenLink(strerror(errno));
-        else if(r == 0) throw PluginBrokenLink();
+        if(q->second.double_rate)
+          {
+            samples[i << 1] = sample << 1;
+            samples[(i << 1) + 1] = 0;
+          }
+        else
+          {
+            samples[i] = sample;
+          }
       }
+
+    int r = send_raw_depoch(myid.c_str(), q->second.dest_channel.c_str(),
+        msr->starttime / NSTMODULUS, 0, tq, samples, msr->samplecnt << bool(q->second.double_rate));
+
+    if(r < 0) throw PluginBrokenLink(strerror(errno));
+    else if(r == 0) throw PluginBrokenLink();
   }
 
 //*****************************************************************************
@@ -946,7 +943,8 @@ void Station::process_mseed(char *pseed, int packtype, int seq, int size)
 class StationGroup_Partner
   {
   public:
-    virtual void process_mseed(char *pseed, int packtype, int size) =0;
+    virtual void process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
+      char subformat) =0;
     virtual ~StationGroup_Partner() {};
   };
 
@@ -1021,19 +1019,31 @@ StationGroup::StationGroup(const string &address, bool multi_init, bool batch_in
   ifup_cmd(ifup_init), ifdown_cmd(ifdown_init), multi(multi_init), batch(batch_init),
   have_schedule(false), last_schedule_check(0), lockfile(lockfile_init)
   {
-    if((slcd = sl_newslcd()) == NULL)
-      throw bad_alloc();
+    if((slcd = sl_initslcd(MYPACKAGE, MYVERSION)) == NULL)
+        throw bad_alloc();
 
-    if((slcd->sladdr = (char *) malloc(address.length() + 1)) == NULL)
-      throw bad_alloc();
+    if(getenv ("SEEDLINK_USERNAME") && getenv ("SEEDLINK_PASSWORD") &&
+      sl_set_auth_envvars (slcd, "SEEDLINK_USERNAME", "SEEDLINK_PASSWORD") < 0)
+        throw PluginError("cannot set auth envvars");
 
-    strcpy(slcd->sladdr, address.c_str());
-    slcd->multistation = multi;
-    slcd->dialup = (uptime != 0);
-    slcd->batchmode = batch;
-    slcd->keepalive = keepalive;
-    slcd->netto = netto;
-    slcd->netdly = netdly;
+    if(sl_set_serveraddress(slcd, address.c_str()) < 0)
+        throw PluginError("cannot set server address " + address);
+
+    if(sl_set_dialupmode(slcd, (uptime != 0)) < 0)
+        throw PluginError("cannot set dialupmode");
+
+    if(sl_set_batchmode(slcd, batch) < 0)
+        throw PluginError("cannot set batchmode");
+
+    if(sl_set_keepalive(slcd, keepalive) < 0)
+        throw PluginError("cannot set keepalive");
+
+    if(sl_set_idletimeout(slcd, netto) < 0)
+        throw PluginError("cannot set idletimeout");
+
+    if(sl_set_reconnectdelay(slcd, netdly) < 0)
+        throw PluginError("cannot set reconnectdelay");
+
     slcd->lastpkttime = 0;
   }
 
@@ -1100,11 +1110,7 @@ rc_ptr<Station> StationGroup::new_station(const string &id,
     stations.insert(make_pair(stad, station));
 
     const char* csel = ((selectors.length() == 0)? NULL: selectors.c_str());
-
-    if(multi)
-        sl_addstream(slcd, in_network.c_str(), in_name.c_str(), csel, -1, NULL);
-    else
-        sl_setuniparams(slcd, csel, -1, NULL);
+    sl_add_stream(slcd, (in_network + "_" + in_name).c_str(), csel, -1, NULL);
 
     return station;
   }
@@ -1242,47 +1248,45 @@ void StationGroup::open_connection()
 
         seqsave_timer.reset();
 
-        int r;
-        SLpacket* slpack;
-        while((r = sl_collect(slcd, &slpack)) == SLPACKET)
+        const SLpacketinfo *packetinfo = NULL;
+        char plbuffer[PLBUFFERSIZE];
+        int status;
+
+        while((status = sl_collect(slcd, &packetinfo, plbuffer, PLBUFFERSIZE)) != SLTERMINATE)
           {
-            if(writen_tmo(child_fd, (void *)slpack, SLHEADSIZE + SLRECSIZE,
-              WRITE_TIMEOUT) <= 0)
+            if(status == SLPACKET)
               {
-                logs(LOG_ERR) << "error sending data to the main process" <<
-                  endl;
-
-                // Ugly hack to decrease sequence number,
-                // hopefully it helps to avoid a data gap...
-                sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(slpack->msrecord);
-                string net, sta, loc, chn;
-                get_id(fsdh, net, sta, loc, chn);
-
-                slstream_s *stream;
-                for(stream = slcd->streams; stream; stream = stream->next)
+                if(writen_tmo(child_fd, (void *)packetinfo, sizeof(SLpacketinfo), WRITE_TIMEOUT) <= 0 ||
+                    writen_tmo(child_fd, plbuffer, packetinfo->payloadlength, WRITE_TIMEOUT) <= 0)
                   {
-                    if(!strcmp(stream->net, net.c_str()) &&
-                      !strcmp(stream->sta, sta.c_str()))
-                      {
-                        stream->seqnum = (stream->seqnum - 1) & 0xffffff;
-                        break;
-                      }
+                    logs(LOG_ERR) << "error sending data to the main process" << endl;
+                    break;
                   }
 
-                if(stream == NULL)
-                    logs(LOG_ERR) << "station " << net << "_" << sta
-                      << " not found in stream list" << endl;
+                if(seqsave_timer.expired() && seqfile.length() != 0)
+                  {
+                    if(sl_savestate(slcd, seqfile.c_str()) < 0)
+                        logs(LOG_WARNING) << "could not save connection state "
+                          "to file '" << seqfile << "'" << endl;
 
+                    seqsave_timer.reset();
+                  }
+              }
+            else if (status == SLTOOLARGE)
+              {
+                logs(LOG_ERR) << "received payload length " << packetinfo->payloadlength <<
+                  " too large for max buffer of " << PLBUFFERSIZE << endl;
                 break;
               }
-
-            if(seqsave_timer.expired() && seqfile.length() != 0)
+            else if (status == SLAUTHFAIL)
               {
-                if(sl_savestate(slcd, seqfile.c_str()) < 0)
-                    logs(LOG_WARNING) << "could not save connection state "
-                      "to file '" << seqfile << "'" << endl;
-
-                seqsave_timer.reset();
+                logs(LOG_ERR) << "authentication failed" << endl;
+                break;
+              }
+            else if (status == SLNOPACKET)
+              {
+                logs(LOG_ERR) << "unexpected SLNOPACKET" << endl;
+                sl_usleep(500000);
               }
           }
 
@@ -1291,10 +1295,9 @@ void StationGroup::open_connection()
         close(child_fd);
         child_fd = -1;
 
-        if(slcd->link != -1)
-            sl_disconnect(slcd);
+        sl_disconnect(slcd);
 
-        if(seqfile.length() != 0 && r == 0)
+        if(seqfile.length() != 0 && status == 0)
           {
             if(sl_savestate(slcd, seqfile.c_str()) < 0)
                 logs(LOG_WARNING) << "could not save connection state to "
@@ -1429,26 +1432,54 @@ bool StationGroup::confirm_shutdown()
 
 int StationGroup::process_slpacket(int fd, StationGroup_Partner &partner)
   {
-    char buf[SLHEADSIZE + SLRECSIZE];
-    SLpacket* slpack = reinterpret_cast<SLpacket *>(buf);
-    sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(slpack->msrecord);
+    SLpacketinfo packetinfo;
+    char plbuffer[PLBUFFERSIZE];
+    int res, bytes_read = 0;
 
-    int bytes_read;
-    if((bytes_read = readn(fd, buf, SLHEADSIZE + SLRECSIZE)) <= 0)
+    if((res = readn(fd, &packetinfo, sizeof(packetinfo))) != sizeof(packetinfo))
+        return -1;
+
+    internal_check(packetinfo.payloadcollected == packetinfo.payloadlength);
+
+    bytes_read += res;
+
+    if((res = readn(fd, plbuffer, packetinfo.payloadlength)) < 0 ||
+      (uint32_t) res != packetinfo.payloadlength)
+        return -1;
+
+    bytes_read += res;
+
+    if(packetinfo.payloadformat != '2' and packetinfo.payloadformat != '3')
         return bytes_read;
 
-    internal_check(bytes_read == SLHEADSIZE + SLRECSIZE);
+    MS3Record *msr;
+    if ( msr3_parse(plbuffer, packetinfo.payloadlength, &msr, 0, 0) != MS_NOERROR )
+      {
+        logs(LOG_ERR) << "invalid record" << endl;
+        return -1;
+      }
 
-    int packtype = sl_packettype(slpack);
+    if ( msr->formatversion + '0' != packetinfo.payloadformat )
+      {
+        logs(LOG_ERR) << "miniSEED version " << msr->formatversion + '0' <<
+          " does not match payload format " << packetinfo.payloadformat << endl;
 
-    if(packtype == SLNUM)
-        logs(LOG_ERR) << "could not determine packet type" << endl;
-
-    if(packtype >= SLNUM)
+        msr3_free(&msr);
         return bytes_read;
+      }
 
-    string net, sta, loc, chn;
-    get_id(fsdh, net, sta, loc, chn);
+    char net[11], sta[11], loc[11], chn[11];
+    if ( ms_sid2nslc_n(msr->sid, net, sizeof(net),
+                               sta, sizeof(sta),
+                               loc, sizeof(loc),
+                               chn, sizeof(chn)) < 0 )
+      {
+        logs(LOG_ERR) << "record has invalid or unsupported source identifier" << endl;
+
+        msr3_free(&msr);
+        return bytes_read;
+      }
+
     StationDescriptor stad(net, sta);
 
     map<StationDescriptor, rc_ptr<Station> >::iterator sp;
@@ -1458,12 +1489,18 @@ int StationGroup::process_slpacket(int fd, StationGroup_Partner &partner)
           " received, but not requested" << endl;
 
         stations.insert(make_pair(stad, new Station()));
+
+        msr3_free(&msr);
         return bytes_read;
       }
 
-    sp->second->process_mseed(slpack->msrecord, packtype, sl_sequence(slpack), SLRECSIZE);
-    partner.process_mseed(slpack->msrecord, packtype, SLRECSIZE);
+    sp->second->process_mseed(msr, plbuffer, packetinfo.payloadlength,
+        packetinfo.payloadsubformat, packetinfo.seqnum);
 
+    partner.process_mseed(msr, plbuffer, packetinfo.payloadlength,
+        packetinfo.payloadsubformat);
+
+    msr3_free(&msr);
     return bytes_read;
   }
 
@@ -1525,7 +1562,7 @@ class Extension
     ~Extension();
 
     void start();
-    void feed(char *pseed, int packtype, int size);
+    void feed(char *plbuffer, uint32_t size, char subformat);
     bool check();
     void shutdown();
 
@@ -1876,7 +1913,7 @@ void Extension::start()
     exit(0);
   }
 
-void Extension::feed(char *pseed, int packtype, int size)
+void Extension::feed(char *plbuffer, uint32_t size, char subformat)
   {
     if(!output_active)
         return;
@@ -1885,24 +1922,20 @@ void Extension::feed(char *pseed, int packtype, int size)
 
     if(have_stream_filter)
       {
-        sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(pseed);
+        sl_fsdh_s* fsdh = reinterpret_cast<sl_fsdh_s *>(plbuffer);
         string net, sta, loc, chn;
         get_id(fsdh, net, sta, loc, chn);
 
-        const char *stype;
-        if((stype = packet_type2string(packtype)) == NULL)
-            stype = "X";
-
         char stream_id[NETLEN + STATLEN + LOCLEN + CHLEN + 10];
-        sprintf(stream_id, "%s_%s_%s_%s_%s", net.c_str(), sta.c_str(),
-          loc.c_str(), chn.c_str(), stype);
+        sprintf(stream_id, "%s_%s_%s_%s_%c", net.c_str(), sta.c_str(),
+          loc.c_str(), chn.c_str(), subformat);
 
         if(regexec(&stream_filter_rx, stream_id, 0, NULL, 0) == REG_NOMATCH)
             return;
       }
 
     int r;
-    if((r = writen_tmo(data_output_fd, pseed, size, send_timeout)) < 0)
+    if((r = writen_tmo(data_output_fd, plbuffer, size, send_timeout)) < 0)
       {
         logs(LOG_WARNING) << "[" << name << "] write error (" <<
           strerror(errno) << ")" << endl;
@@ -2036,7 +2069,8 @@ class Chain: private Extension_Partner, private StationGroup_Partner
     void add_station(const string &id, const string &out_name,
       const string &out_network, rc_ptr<Station>);
 
-    void process_mseed(char *pseed, int packtype, int size) override;
+    void process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
+      char subformat) override;
     void check();
     void shutdown();
   };
@@ -2127,15 +2161,8 @@ void Chain::setup_timetable(const string &timetable_loader)
 
         *(stype++) = 0;
 
-        if((type = packet_type2int(stype)) == -1)
-          {
-            logs(LOG_WARNING) << "invalid stream: " << stream << endl;
-            free(loc);
-            continue;
-          }
-
         StationDescriptor stad(net, sta);
-        StreamDescriptor strd(loc, chn, type);
+        StreamDescriptor strd(loc, chn, *stype);
 
         free(loc);
 
@@ -2332,11 +2359,15 @@ void Chain::add_station(const string &id, const string &out_name,
     station_id_map.insert(make_pair(id, station));
   }
 
-void Chain::process_mseed(char *pseed, int packtype, int size)
+void Chain::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
+  char subformat)
   {
+    if(msr->formatversion != 2)
+        return;
+
     list<rc_ptr<Extension> >::iterator ep;
     for(ep = extensions.begin(); ep != extensions.end(); ++ep)
-        (*ep)->feed(pseed, packtype, SLRECSIZE);
+        (*ep)->feed(plbuffer, size, subformat);
   }
 
 Chain chain;
