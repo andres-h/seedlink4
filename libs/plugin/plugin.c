@@ -158,9 +158,26 @@ int send_mseed2(const char *station, const char *channel, int seq,
     strncpy(head.station, station, PLUGIN_SIDLEN);
     strncpy(head.channel, channel, PLUGIN_CIDLEN);
     // save sequence number on the unused timing_quality field
-    head.timing_quality = seq;
+    head.timing_quality = seq & 0xffffff;
     head.packtype = PluginMSEEDPacket;
     head.data_size = packet_size;
+
+    return send_packet(&head, dataptr, packet_size);
+  }
+
+int send_mseed3(const char *station, const char *channel, uint64_t seq,
+  const void *dataptr, int packet_size)
+  {
+    struct PluginPacketHeader head;
+
+    memset(&head, 0, sizeof(struct PluginPacketHeader));
+    strncpy(head.station, station, PLUGIN_SIDLEN);
+    strncpy(head.channel, channel, PLUGIN_CIDLEN);
+    // save sequence number on the unused timing_quality field
+    // need to change the header to accommodate this
+    head.timing_quality = seq & 0xffffff;
+    head.packtype = PluginMSEED3Packet;
+    head.data_size = (int) packet_size;
 
     return send_packet(&head, dataptr, packet_size);
   }

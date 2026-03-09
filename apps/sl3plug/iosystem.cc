@@ -254,6 +254,7 @@ class BufferStoreImpl: public BufferStore
       int nbufs_init);
     ~BufferStoreImpl();
     Buffer *get_buffer();
+    Buffer *get_buffer(int size);
     void queue_buffer(Buffer *buf1);
     void load_buffers(int fd);
     void create_blank_buffers(int n);
@@ -309,7 +310,7 @@ BufferStoreImpl::~BufferStoreImpl()
       }
   }
 
-Buffer *BufferStoreImpl::get_buffer(void)
+Buffer *BufferStoreImpl::get_buffer(int size)
   {
     internal_check(buf_free != NULL);
     
@@ -318,7 +319,19 @@ Buffer *BufferStoreImpl::get_buffer(void)
     if(buf_first == buf) buf_first = buf->nextptr;
     if(buf->seq != Sequence::uninitialized) partner.delete_oldest_buffer(buf);
     buf->seq = Sequence::uninitialized;
+
+    if(buf->size != size)
+      {
+        buf = new (buf) BufferImpl(size);
+        if((buf->dataptr = realloc(buf->dataptr, size)) == NULL) throw bad_alloc();
+      }
+
     return(buf);
+  }
+
+Buffer *BufferStoreImpl::get_buffer(void)
+  {
+    return get_buffer(bufsize);
   }
 
 void BufferStoreImpl::queue_buffer(Buffer *buf1)
@@ -479,12 +492,10 @@ bool StationIO::flush(int fd)
             continue;
           }
 
-        char subformat;
+        char subformat = 'D';
 
         if(msr->formatversion == 2)
           {
-            subformat = 'D';
-
             if (msr->samplecnt == 0)
               {
                 if(mseh_exists(msr, "/FDSN/Event/Detection"))
@@ -509,11 +520,7 @@ bool StationIO::flush(int fd)
                 subformat = 'L';  // log
               }
           }
-        else if( msr->formatversion == 3)
-          {
-            subformat = 'D';
-          }
-        else
+        else if(msr->formatversion != 3)
           {
             logs(LOG_ERR) << station_key << ": unsupported MiniSEED version: " <<
               msr->formatversion << endl;
@@ -523,14 +530,14 @@ bool StationIO::flush(int fd)
             continue;
           }
 
-        if(send_packet(fd, buf->data(), buf->size, '2', subformat) < 0)
+        if(send_packet(fd, buf->data(), buf->size, '0' + msr->formatversion, subformat) < 0)
           {
             logs(LOG_ERR) << strerror(errno) << endl;
             msr3_free(&msr);
             return false;
           }
 
-        if(subformat != 'D')
+        if(msr->formatversion == 3 || subformat != 'D') // skip MS2->MS3 conversion
           {
             buf = buf->next();
             msr3_free(&msr);

@@ -32,6 +32,22 @@
 extern "C" {
 #endif
 
+/* SeedLink packet types */
+#define SLDATA 0     /* waveform data record */
+#define SLDET  1     /* detection record */
+#define SLCAL  2     /* calibration record */
+#define SLTIM  3     /* timing record */
+#define SLMSG  4     /* message record */
+#define SLBLK  5     /* general record */
+#define SLNUM  6     /* used as the error indicator (same as SLCHA) */
+#define SLCHA  6     /* for requesting channel info or detectors */
+#define SLINF  7     /* a non-terminating XML formatted message in a miniSEED
+			log record, used for INFO responses */
+#define SLINFT 8     /* a terminating XML formatted message in a miniSEED log
+			record, used for INFO responses */
+#define SLKEEP 9     /* an XML formatted message in a miniSEED log
+			record, used for keepalive/heartbeat responses */
+
 /* SEED structures */
 
 /* Portability to the XScale (ARM) architecture requires a packed

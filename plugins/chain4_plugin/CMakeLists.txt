@@ -19,7 +19,7 @@ TARGET_LINK_LIBRARIES(
 	chain4_plugin
 		slink4
 		mseed
-		slplugin
+		slplugin4
 		slutils
 		${LIBXML2_LIBRARIES}
 )

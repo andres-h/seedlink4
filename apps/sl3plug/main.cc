@@ -810,6 +810,7 @@ class Station: public StreamProcessor::InputVisitor, private PluginPartner
     virtual ~Station() {}
 
     void send_mseed(const void *rec);
+    void send_mseed3(const void *rec, size_t size);
     void send_log(const ptime &pt, const char *msg, int msglen);
     void send_raw_with_time(rc_ptr<Plugin> plugin, const string &input_name,
       const ptime &pt, int usec_correction, int timing_quality,
@@ -1049,8 +1050,17 @@ void Station::send_mseed(const void *rec)
 
 void Station::commit_mseed(const void *rec)
   {
-    Buffer* buf = bufs->get_buffer();
+    Buffer* buf = bufs->get_buffer(1 << MSEED_RECLEN);
     memcpy(buf->data(), rec, (1 << MSEED_RECLEN));
+    bufs->queue_buffer(buf);
+  }
+
+void Station::send_mseed3(const void *rec, size_t size)
+  {
+    if(bufs == NULL) return;
+
+    Buffer* buf = bufs->get_buffer(size);
+    memcpy(buf->data(), rec, size);
     bufs->queue_buffer(buf);
   }
 
@@ -1958,6 +1968,11 @@ bool IOHandler::operator()(Fdset &fds)
                   }
 
                 st->send_mseed(data_buf);
+                break;
+
+              case PluginMSEED3Packet:
+                DEBUG_MSG("PluginMSEEDPacket (" << station_key << ")" << endl);
+                st->send_mseed3(data_buf, head.data_size);
                 break;
 
               case PluginLogPacket:

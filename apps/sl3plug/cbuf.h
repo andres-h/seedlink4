@@ -31,12 +31,13 @@ template<class T>
 class CircularBuffer;
 
 template<class T>
-class CBIterator: public iterator<input_iterator_tag, const T>
+class CBIterator
   {
   friend class CircularBuffer<T>;
   private:
-    typedef typename iterator<input_iterator_tag, const T>::reference reference;
-    typedef typename iterator<input_iterator_tag, const T>::pointer pointer;
+    using iterator_category = input_iterator_tag;
+    using reference = T&;
+    using pointer = T*;
 
     pointer dataptr;
     unsigned int mask;

@@ -772,6 +772,12 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
     if(out_name.length() == 0)
         return;
 
+    if(msr->formatversion == 3)
+      {
+        send_mseed3(myid.c_str(), msr->sid, seq, plbuffer, size);
+        return;
+      }
+
     if(msr->formatversion != 2)
         return;
 
@@ -812,7 +818,7 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
     if(subformat != 'D')
       {
         int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
-            seq & 0xffffff, plbuffer, size);
+            seq, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -831,7 +837,7 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
     else
       {
         int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
-            seq & 0xffffff, plbuffer, size);
+            seq, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -1452,7 +1458,7 @@ int StationGroup::process_slpacket(int fd, StationGroup_Partner &partner)
     if(packetinfo.payloadformat != '2' and packetinfo.payloadformat != '3')
         return bytes_read;
 
-    MS3Record *msr;
+    MS3Record *msr = NULL;
     if ( msr3_parse(plbuffer, packetinfo.payloadlength, &msr, 0, 0) != MS_NOERROR )
       {
         logs(LOG_ERR) << "invalid record" << endl;
@@ -1494,11 +1500,35 @@ int StationGroup::process_slpacket(int fd, StationGroup_Partner &partner)
         return bytes_read;
       }
 
-    sp->second->process_mseed(msr, plbuffer, packetinfo.payloadlength,
-        packetinfo.payloadsubformat, packetinfo.seqnum);
+    char subformat = packetinfo.payloadsubformat;
 
-    partner.process_mseed(msr, plbuffer, packetinfo.payloadlength,
-        packetinfo.payloadsubformat);
+    if(!subformat)
+      {
+        if ( msr->samplecnt == 0 )
+          {
+            if ( mseh_exists(msr, "FDSN.Event.Detection" ) )
+                subformat = 'E';
+            else if ( mseh_exists(msr, "FDSN.Calibration.Sequence" ) )
+                subformat = 'C';
+            else if ( mseh_exists(msr, "FDSN.Time.Exception" ) )
+                subformat = 'T';
+            else
+                subformat = 'O';  /* opaque */
+          }
+        else if ( msr->samprate == 0.0 && msr->sampletype == 'a' )
+          {
+            subformat = 'L';      /* log */
+          }
+        else
+          {
+            subformat = 'D';
+          }
+      }
+
+    sp->second->process_mseed(msr, plbuffer, packetinfo.payloadlength, subformat,
+        packetinfo.seqnum);
+
+    partner.process_mseed(msr, plbuffer, packetinfo.payloadlength, subformat);
 
     msr3_free(&msr);
     return bytes_read;
@@ -1798,7 +1828,7 @@ void Extension::check_cmds()
 
     int reqrp = 0, reqlen, seplen;
     while(reqlen = strcspn(reqbuf + reqrp, "\r\n"),
-      seplen = strspn(reqbuf + reqrp + reqlen, "\r\n"))
+      (seplen = strspn(reqbuf + reqrp + reqlen, "\r\n")))
       {
         reqbuf[reqrp + reqlen] = 0;
         partner.extension_request(reqbuf + reqrp);
@@ -2135,7 +2165,7 @@ void Chain::setup_timetable(const string &timetable_loader)
       }
 
     char net[3], sta[6], stream[9], *loc, *chn, *stype;
-    int type, recno, year, doy, hour, min, sec, usec;
+    int recno, year, doy, hour, min, sec, usec;
 
     int r;
     while((r = fscanf(fp, "%2s %5s %8s %d %d %d %d %d %d %d\n", net, sta,

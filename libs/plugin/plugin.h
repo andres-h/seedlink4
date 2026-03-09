@@ -14,6 +14,7 @@
 #ifndef PLUGIN_H
 #define PLUGIN_H
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #ifdef PLUGIN_COMPATIBILITY
@@ -35,7 +36,8 @@ enum PluginPacketType
     PluginRawDataGapPacket,
     PluginRawDataFlushPacket,
     PluginLogPacket,
-    PluginMSEEDPacket
+    PluginMSEEDPacket,
+    PluginMSEED3Packet
   };
 
 struct ptime
@@ -71,6 +73,8 @@ int send_log3(const char *station, const struct ptime *pt, const char *fmt,
   ...);
 int send_mseed(const char *station, const void *dataptr, int packet_size);
 int send_mseed2(const char *station, const char *channel, int seq,
+  const void *dataptr, int packet_size);
+int send_mseed3(const char *station, const char *channel, uint64_t seq,
   const void *dataptr, int packet_size);
 int send_raw_depoch(const char *station, const char *channel, double depoch,
   int usec_correction, int timing_quality, const int32_t *dataptr,

@@ -394,7 +394,7 @@ class StringListAttribute: public CfgAttribute
         const char *p = value.c_str();
         int len = 0;
         
-        while(p += len, p += strspn(p, sep.c_str()), len = strcspn(p, sep.c_str()))
+        while(p += len, p += strspn(p, sep.c_str()), (len = strcspn(p, sep.c_str())))
             valref.push_back(string(p, len));
 
         return true;
