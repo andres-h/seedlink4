@@ -23,7 +23,7 @@
 #include "strutils.h"
 
 #define PACKAGE   "slarchive"
-#define VERSION   "4.0"
+#define VERSION   "4.0a"
 
 static void packet_handler (SLCD *slconn, const SLpacketinfo *packetinfo,
 			    const char *payload, uint32_t payloadlength);

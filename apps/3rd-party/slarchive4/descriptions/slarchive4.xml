@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <seiscomp>
-	<module name="slarchive" category="Acquisition" standalone="true">
-		<description>SeedLink client for data stream archiving</description>
+	<module name="slarchive4" category="Acquisition" standalone="true">
+		<description>SeedLink4 client for data stream archiving</description>
 		<configuration>
 			<parameter name="address" type="string" default="127.0.0.1">
 				<description>
@@ -251,7 +251,7 @@
 		</command-line>
 	</module>
 
-	<binding module="slarchive">
+	<binding module="slarchive4">
 		<description>
 		Configures what streams of a station should be archived and for
 		how long.

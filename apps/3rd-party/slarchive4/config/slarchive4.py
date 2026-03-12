@@ -60,8 +60,6 @@ class Module(seiscomp.kernel.Module):
     params = self.env.lockFile(self.name)
     params += " " + self.name + ' -b -x "' + os.path.join(run_dir, mymodname + ".seq") + ':1000000"'
     params += ' -SDS "%s"' % self.archive_dir
-    try: params += ' -B %d' % cfg.getInt('buffer')
-    except: pass
     try: params += ' -nt %d' % cfg.getInt('networkTimeout')
     except: params += ' -nt 900'
     try: params += ' -nd %d' % cfg.getInt('delay')
@@ -82,7 +80,7 @@ class Module(seiscomp.kernel.Module):
 
     cfg = seiscomp.config.Config()
     cfg.readConfig(os.path.join(key_dir, station_config_file))
-    line = self.net + " " + self.sta
+    line = self.net + "_" + self.sta
     try: line += " " + cfg.getString("selectors")
     except: pass
 
