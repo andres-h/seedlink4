@@ -20,7 +20,7 @@ TARGET_LINK_LIBRARIES(
 		slink4
 		mseed
 		slplugin4
-		slutils
+		slutils4
 		${LIBXML2_LIBRARIES}
 )
 

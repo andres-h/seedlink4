@@ -133,53 +133,36 @@ int send_raw_depoch(const char *station, const char *channel, double depoch,
       dataptr, number_of_samples);
   }
 
-int send_mseed(const char *station, const void *dataptr, int packet_size)
+int send_mseed(const char *station, const void *dataptr, int data_size)
   {
     struct PluginPacketHeader head;
 
-    if(packet_size != PLUGIN_MSEED_SIZE) return 0;
+    if(data_size != PLUGIN_MSEED_SIZE) return 0;
 
     memset(&head, 0, sizeof(struct PluginPacketHeader));
     strncpy(head.station, station, PLUGIN_SIDLEN);
     head.packtype = PluginMSEEDPacket;
-    head.data_size = packet_size;
+    head.data_size = data_size;
 
-    return send_packet(&head, dataptr, packet_size);
+    return send_packet(&head, dataptr, data_size);
   }
 
-int send_mseed2(const char *station, const char *channel, int seq,
-  const void *dataptr, int packet_size)
+int send_mseedx(const char *station, char format, char subformat, uint64_t seq,
+  const void *dataptr, int data_size)
   {
     struct PluginPacketHeader head;
 
-    if(packet_size != PLUGIN_MSEED_SIZE) return 0;
+    if(data_size > PLUGIN_MAX_DATA_BYTES) return 0;
 
     memset(&head, 0, sizeof(struct PluginPacketHeader));
     strncpy(head.station, station, PLUGIN_SIDLEN);
-    strncpy(head.channel, channel, PLUGIN_CIDLEN);
-    // save sequence number on the unused timing_quality field
-    head.timing_quality = seq & 0xffffff;
-    head.packtype = PluginMSEEDPacket;
-    head.data_size = packet_size;
+    head.format = format;
+    head.subformat = subformat;
+    head.seq = seq;
+    head.packtype = PluginMSEEDXPacket;
+    head.data_size = data_size;
 
-    return send_packet(&head, dataptr, packet_size);
-  }
-
-int send_mseed3(const char *station, const char *channel, uint64_t seq,
-  const void *dataptr, int packet_size)
-  {
-    struct PluginPacketHeader head;
-
-    memset(&head, 0, sizeof(struct PluginPacketHeader));
-    strncpy(head.station, station, PLUGIN_SIDLEN);
-    strncpy(head.channel, channel, PLUGIN_CIDLEN);
-    // save sequence number on the unused timing_quality field
-    // need to change the header to accommodate this
-    head.timing_quality = seq & 0xffffff;
-    head.packtype = PluginMSEED3Packet;
-    head.data_size = (int) packet_size;
-
-    return send_packet(&head, dataptr, packet_size);
+    return send_packet(&head, dataptr, data_size);
   }
 
 int send_log3(const char *station, const struct ptime *pt, const char *fmt, ...)
@@ -196,65 +179,6 @@ int send_log3(const char *station, const struct ptime *pt, const char *fmt, ...)
     return retval;
   }
     
-#ifdef PLUGIN_COMPATIBILITY
-struct ptime it_to_pt(INT_TIME it)
-  {
-    EXT_TIME et = int_to_ext(it);
-    struct ptime pt;
-
-    pt.year = et.year;
-    pt.yday = et.doy;
-    pt.hour = et.hour;
-    pt.minute = et.minute;
-    pt.second = et.second;
-    pt.usec = et.usec;
-    return pt;
-  }
-
-int send_raw2(const char *station, const char *channel, const INT_TIME *it,
-  int usec_correction, int timing_quality, const int32_t *dataptr,
-  int number_of_samples)
-  {
-    struct ptime pt;
-    
-    if(it == NULL)
-      {
-        if(number_of_samples == 0)
-            return send_flush3(station, channel);
-        else
-            return send_raw3(station, channel, NULL, usec_correction,
-              timing_quality, dataptr, number_of_samples);
-      }
-        
-    pt = it_to_pt(*it);
-    return send_raw3(station, channel, &pt, usec_correction, timing_quality,
-      dataptr, number_of_samples);
-  }
-
-int send_raw(const char *station, const char *channel, const INT_TIME *it,
-  int usec_correction, const int32_t *dataptr, int number_of_samples)
-  {
-    return send_raw2(station, channel, it, usec_correction, -1, dataptr,
-      number_of_samples);
-  }
-
-int send_log(const char *station, const INT_TIME *it, const char *fmt, ...)
-  {
-    int retval;
-    struct ptime pt;
-    va_list argptr;
-    
-    if(it == NULL) return 0;
-    
-    va_start(argptr, fmt);
-    pt = it_to_pt(*it);
-    retval = send_log_helper(station, &pt, fmt, argptr);
-    va_end(argptr);
-
-    return retval;
-  }
-#endif
-
 int send_log_helper(const char *station, const struct ptime *pt,
   const char *fmt, va_list argptr)
   {

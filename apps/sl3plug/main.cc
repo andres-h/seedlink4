@@ -589,7 +589,8 @@ bool Plugin::read_helper()
           header_buf.packtype == PluginRawDataPacket)
             data_bytes = header_buf.data_size << 2;
         else if(header_buf.packtype == PluginLogPacket ||
-          header_buf.packtype == PluginMSEEDPacket)
+          header_buf.packtype == PluginMSEEDPacket ||
+          header_buf.packtype == PluginMSEEDXPacket)
             data_bytes = header_buf.data_size;
         else
             data_bytes = 0;
@@ -810,7 +811,7 @@ class Station: public StreamProcessor::InputVisitor, private PluginPartner
     virtual ~Station() {}
 
     void send_mseed(const void *rec);
-    void send_mseed3(const void *rec, size_t size);
+    void send_mseedx(const void *rec, size_t size);
     void send_log(const ptime &pt, const char *msg, int msglen);
     void send_raw_with_time(rc_ptr<Plugin> plugin, const string &input_name,
       const ptime &pt, int usec_correction, int timing_quality,
@@ -1055,7 +1056,7 @@ void Station::commit_mseed(const void *rec)
     bufs->queue_buffer(buf);
   }
 
-void Station::send_mseed3(const void *rec, size_t size)
+void Station::send_mseedx(const void *rec, size_t size)
   {
     if(bufs == NULL) return;
 
@@ -1970,9 +1971,9 @@ bool IOHandler::operator()(Fdset &fds)
                 st->send_mseed(data_buf);
                 break;
 
-              case PluginMSEED3Packet:
-                DEBUG_MSG("PluginMSEEDPacket (" << station_key << ")" << endl);
-                st->send_mseed3(data_buf, head.data_size);
+              case PluginMSEEDXPacket:
+                DEBUG_MSG("PluginMSEEDXPacket (" << station_key << ")" << endl);
+                st->send_mseedx(data_buf, head.data_size);
                 break;
 
               case PluginLogPacket:

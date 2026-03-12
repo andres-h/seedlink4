@@ -72,8 +72,8 @@ using namespace Utilities;
 namespace {
 
 const int POLL_USEC           = 1000000;
-const int PLBUFFERSIZE        = 16384;
-const int MAX_SAMPLES         = (PLBUFFERSIZE * 2);
+const int PLBUFFERSIZE        = PLUGIN_MAX_DATA_BYTES;
+const int MAX_SAMPLES         = PLUGIN_MAX_DATA_BYTES;
 const int SHUTDOWN_WAIT       = 10;
 const int WRITE_TIMEOUT       = 600;
 const int REGEX_ERRLEN        = 100;
@@ -413,6 +413,9 @@ class StreamPacket
   {
   public:
     INT_TIME it;
+    char format;
+    char subformat;
+    uint64_t seq;
     uint64_t size;
     char data[PLBUFFERSIZE];
   };
@@ -444,7 +447,8 @@ class TriggerBuffer
     void set_trigger_off(int year, int month, int day,
       int hour, int minute, int second);
 
-    void push_packet(INT_TIME begin_time, char *plbuffer, uint32_t size);
+    void push_packet(INT_TIME begin_time, char format, char subformat,
+      uint64_t seq, char *plbuffer, uint32_t size);
   };
 
 void TriggerBuffer::set_trigger_on(int year, int month, int day,
@@ -478,8 +482,8 @@ void TriggerBuffer::set_trigger_on(int year, int month, int day,
         if(int(tdiff(it, packets.front()->it) / 1000000.0) > pre_seconds)
             continue;
 
-        int r = send_mseed(station_id.c_str(), packets.front()->data,
-          packets.front()->size);
+        int r = send_mseedx(station_id.c_str(), packets.front()->format, packets.front()->subformat,
+          packets.front()->seq, packets.front()->data, packets.front()->size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -517,7 +521,8 @@ void TriggerBuffer::set_trigger_off(int year, int month, int day,
     trigger_off_requested = true;
   }
 
-void TriggerBuffer::push_packet(INT_TIME begin_time, char *plbuffer, uint32_t size)
+void TriggerBuffer::push_packet(INT_TIME begin_time, char format, char subformat,
+  uint64_t seq, char *plbuffer, uint32_t size)
   {
     while(!packets.empty() &&
       int(tdiff(begin_time, packets.front()->it) / 1000000.0) > buffer_length)
@@ -525,7 +530,7 @@ void TriggerBuffer::push_packet(INT_TIME begin_time, char *plbuffer, uint32_t si
 
     if(trigger_on)
       {
-        int r = send_mseed(station_id.c_str(), plbuffer, size);
+        int r = send_mseedx(station_id.c_str(), format, subformat, seq, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -534,6 +539,9 @@ void TriggerBuffer::push_packet(INT_TIME begin_time, char *plbuffer, uint32_t si
       {
         StreamPacket* pack = new StreamPacket;
         pack->it = begin_time;
+        pack->format = format;
+        pack->subformat = subformat;
+        pack->seq = seq;
         pack->size = size;
         memcpy(pack->data, plbuffer, size);
         packets.push_back(pack);
@@ -774,7 +782,7 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
 
     if(msr->formatversion == 3)
       {
-        send_mseed3(myid.c_str(), msr->sid, seq, plbuffer, size);
+        send_mseedx(myid.c_str(), '3', subformat, seq, plbuffer, size);
         return;
       }
 
@@ -817,8 +825,7 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
 
     if(subformat != 'D')
       {
-        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
-            seq, plbuffer, size);
+        int r = send_mseedx(myid.c_str(), '2', subformat, seq, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();
@@ -832,12 +839,11 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
     map<string, rc_ptr<TriggerBuffer> >::iterator p;
     if((p = trigger_map.find(srcname)) != trigger_map.end())
       {
-        p->second->push_packet(hdrtime, plbuffer, size);
+        p->second->push_packet(hdrtime, '2', subformat, seq, plbuffer, size);
       }
     else
       {
-        int r = send_mseed2(myid.c_str(), (loc + "_" + chn + "_" + string(1, subformat)).c_str(),
-            seq, plbuffer, size);
+        int r = send_mseedx(myid.c_str(), '2', subformat, seq, plbuffer, size);
 
         if(r < 0) throw PluginBrokenLink(strerror(errno));
         else if(r == 0) throw PluginBrokenLink();

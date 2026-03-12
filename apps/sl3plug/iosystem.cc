@@ -322,8 +322,14 @@ Buffer *BufferStoreImpl::get_buffer(int size)
 
     if(buf->size != size)
       {
+        BufferImpl *prevptr = buf->prevptr;
+        BufferImpl *nextptr = buf->nextptr;
+        void *dataptr = buf->dataptr;
+
         buf = new (buf) BufferImpl(size);
-        if((buf->dataptr = realloc(buf->dataptr, size)) == NULL) throw bad_alloc();
+        buf->prevptr = prevptr;
+        buf->nextptr = nextptr;
+        if((buf->dataptr = realloc(dataptr, size)) == NULL) throw bad_alloc();
       }
 
     return(buf);
@@ -611,7 +617,16 @@ class ConnectionManagerImpl: public ConnectionManager,
 
 void ConnectionManagerImpl::notify(StationIO *station)
   {
-    pending.insert(station);
+    if(fd == -1)
+      {
+        pending.insert(station);
+      }
+    else if(!station->flush(fd))
+      {
+        pending.insert(station);
+        close(fd);
+        fd = -1;
+      }
   }
 
 bool ConnectionManagerImpl::open_feed(int port)
@@ -690,6 +705,8 @@ rc_ptr<BufferStore> ConnectionManagerImpl::register_station(const string &statio
 
 void ConnectionManagerImpl::start(int port)
   {
+    open_feed(port);
+
     while((*handler)(fds))
       {
         timeval tv;

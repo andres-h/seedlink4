@@ -19,7 +19,7 @@ SET(
 
 
 INCLUDE_DIRECTORIES(../../../../system/libs/3rd-party/libmseed)
-SC_INSTALL_INIT(${APP_NAME} ../../../common/apps/templates/initd.py)
+SC_INSTALL_INIT(${APP_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/config/seedlink4.py")
 
 FILE(GLOB descs "${CMAKE_CURRENT_SOURCE_DIR}/descriptions/*.xml")
 INSTALL(FILES ${descs} DESTINATION ${SC3_PACKAGE_APP_DESC_DIR})

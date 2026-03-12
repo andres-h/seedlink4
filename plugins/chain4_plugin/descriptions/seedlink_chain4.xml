@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <seiscomp>
-	<plugin name="chain">
+	<plugin name="4chain">
 		<extends>seedlink</extends>
-		<description>Global options for the chain plugin</description>
+		<description>Global options for the chain4 plugin</description>
 		<configuration>
 			<group name="plugins">
 				<group name="chain">
@@ -24,8 +24,8 @@
 			</group>
 		</configuration>
 	</plugin>
-	<binding module="seedlink" name="chain" category="sources">
-		<description>Seedlink server (TCP/IP)</description>
+	<binding module="seedlink" name="4chain" category="sources">
+		<description>Seedlink4 server (TCP/IP)</description>
 		<configuration>
 			<parameter name="address" type="string" default="geofon.gfz.de">
 				<description>

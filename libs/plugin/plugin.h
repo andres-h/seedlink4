@@ -17,13 +17,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#ifdef PLUGIN_COMPATIBILITY
-#include "qtime.h"
-#endif
-
 #define PLUGIN_INTERFACE_VERSION  3
 #define PLUGIN_FD                 63
-#define PLUGIN_MAX_DATA_BYTES     4000
+#define PLUGIN_MAX_DATA_BYTES     16384
 #define PLUGIN_MAX_MSG_SIZE       448
 #define PLUGIN_MSEED_SIZE         512
 #define PLUGIN_SIDLEN             10      /* length of station ID */
@@ -37,7 +33,7 @@ enum PluginPacketType
     PluginRawDataFlushPacket,
     PluginLogPacket,
     PluginMSEEDPacket,
-    PluginMSEED3Packet
+    PluginMSEEDXPacket
   };
 
 struct ptime
@@ -54,12 +50,37 @@ struct PluginPacketHeader
   {
     enum PluginPacketType packtype;
     char station[PLUGIN_SIDLEN];
-    char channel[PLUGIN_CIDLEN];
+
+    union
+      {
+        char channel[PLUGIN_CIDLEN];
+
+        struct
+          {
+            char format;
+            char subformat;
+          };
+      };
+
     struct ptime pt;
-    int usec_correction;
-    int timing_quality;
+
+    union
+      {
+        struct
+          {
+            int usec_correction;
+            int timing_quality;
+          };
+
+        uint64_t seq;
+      };
+
     int data_size;
-  };
+  }
+#if defined (__GNUC__)
+  __attribute__ ((packed))
+#endif
+;
     
 #ifdef __cplusplus
 extern "C" {
@@ -71,23 +92,12 @@ int send_raw3(const char *station, const char *channel, const struct ptime *pt,
 int send_flush3(const char *station, const char *channel);
 int send_log3(const char *station, const struct ptime *pt, const char *fmt,
   ...);
-int send_mseed(const char *station, const void *dataptr, int packet_size);
-int send_mseed2(const char *station, const char *channel, int seq,
-  const void *dataptr, int packet_size);
-int send_mseed3(const char *station, const char *channel, uint64_t seq,
-  const void *dataptr, int packet_size);
+int send_mseed(const char *station, const void *dataptr, int data_size);
+int send_mseedx(const char *station, char format, char subformat, uint64_t seq,
+  const void *dataptr, int data_size);
 int send_raw_depoch(const char *station, const char *channel, double depoch,
   int usec_correction, int timing_quality, const int32_t *dataptr,
   int number_of_samples);
-
-#ifdef PLUGIN_COMPATIBILITY
-int send_raw(const char *station, const char *channel, const INT_TIME *it,
-  int usec_correction, const int32_t *dataptr, int number_of_samples);
-int send_raw2(const char *station, const char *channel, const INT_TIME *it,
-  int usec_correction, int timing_quality, const int32_t *dataptr,
-  int number_of_samples);
-int send_log(const char *station, const INT_TIME *it, const char *fmt, ...);
-#endif
 
 #ifdef __cplusplus
 }
