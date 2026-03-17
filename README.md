@@ -10,6 +10,9 @@ into the `seiscomp` build environment and checked out into
 $ git clone [host]/seiscomp.git
 $ cd seiscomp/src/base
 $ git clone [host]/seedlink4.git
+$ cd seedlink4
+$ git submodule init
+$ git submodule update
 ```
 
 # Build
