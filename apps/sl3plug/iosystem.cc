@@ -490,7 +490,7 @@ bool StationIO::flush(int fd)
     while(buf != NULL)
       {
         int err;
-        if((err = msr3_parse((const char *)buf->data(), buf->size, &msr, MSF_UNPACKDATA, 0)) != MS_NOERROR)
+        if((err = msr3_parse((const char *)buf->data(), buf->size, &msr, 0, 0)) != MS_NOERROR)
           {
             logs(LOG_ERR) << station_key << ": " << ms_errorstr(err) << endl;
             buf = buf->next();
@@ -521,7 +521,7 @@ bool StationIO::flush(int fd)
                     subformat = 'O';  // opaque
                   }
               }
-            else if(msr->samprate == 0.0 && msr->sampletype == 't')
+            else if(msr->samprate == 0.0)
               {
                 subformat = 'L';  // log
               }
@@ -537,40 +537,6 @@ bool StationIO::flush(int fd)
           }
 
         if(send_packet(fd, buf->data(), buf->size, '0' + msr->formatversion, subformat) < 0)
-          {
-            logs(LOG_ERR) << strerror(errno) << endl;
-            msr3_free(&msr);
-            return false;
-          }
-
-        if(msr->formatversion == 3 || subformat != 'D') // skip MS2->MS3 conversion
-          {
-            buf = buf->next();
-            msr3_free(&msr);
-            continue;
-          }
-
-        msr->formatversion = 3;
-        msr->reclen = -1;
-
-        struct Handlerdata
-          {
-            int fd;
-            int err;
-            StationIO *obj;
-          } h;
-
-        h.fd = fd;
-        h.err = 0;
-        h.obj = this;
-
-        msr3_pack(msr, [](char *record, int reclen, void *handlerdata)
-          {
-            Handlerdata* h = reinterpret_cast<Handlerdata *>(handlerdata);
-            h->err = h->obj->send_packet(h->fd, record, reclen, '3', 'D');
-          }, &h, NULL, MSF_FLUSHDATA, 0);
-
-        if(h.err < 0)
           {
             logs(LOG_ERR) << strerror(errno) << endl;
             msr3_free(&msr);
