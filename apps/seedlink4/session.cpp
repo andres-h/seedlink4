@@ -836,14 +836,15 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 		_currentStation->setSequence(0);
 	}
 
-	Core::Time starttime = parseTime(tok, tokLen);
-	if ( !starttime.valid() ) {
+	try {
+		_currentStation->setStart(parseTime(tok, tokLen));
+	}
+	catch ( exception &e ) {
+		SEISCOMP_DEBUG("%s", e.what());
 		if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS invalid start time\r\n");
 		else if ( !_batch ) sendResponse("ERROR\r\n");
 		return;
 	}
-
-	_currentStation->setStart(starttime);
 
 	if ( (tok = Core::tokenize(data, " ", len, tokLen)) == NULL ) {
 		if ( _stations.empty() && _wildcardStations.empty() ) {
@@ -857,14 +858,15 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 		return;
 	}
 
-	Core::Time endtime = parseTime(tok, tokLen);
-	if ( !endtime.valid() ) {
+	try {
+		_currentStation->setEnd(parseTime(tok, tokLen));
+	}
+	catch ( exception &e ) {
+		SEISCOMP_DEBUG("%s", e.what());
 		if ( _slproto >= 4.0 ) sendResponse("ERROR ARGUMENTS invalid end time\r\n");
 		else if ( !_batch ) sendResponse("ERROR\r\n");
 		return;
 	}
-
-	_currentStation->setEnd(endtime);
 
 	if ( _stations.empty() && _wildcardStations.empty() ) {
 		// uni-station mode, v3 only
@@ -881,7 +883,12 @@ void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
-	return Core::Time::FromString(string(data, 0, len).c_str(), "%FT%T.%fZ");
+	if ( _slproto >= 4.0 ) {
+		return Core::Time::FromString(string(data, 0, len).c_str(), "%FT%T.%fZ");
+	}
+	else {
+		return Core::Time::FromString(string(data, 0, len).c_str(), "%Y,%m,%d,%H,%M,%S");
+	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
