@@ -53,7 +53,7 @@
 #include "schedule.h"
 
 #define MYPACKAGE "chain4_plugin"
-#define MYVERSION "4.0 (2026.XXX)"
+#define MYVERSION "4.0 (2026.098)"
 
 #ifndef CONFIG_FILE
 #define CONFIG_FILE "/home/sysop/config/chain.xml"
@@ -782,7 +782,11 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
 
     if(msr->formatversion == 3)
       {
-        send_mseedx(myid.c_str(), '3', subformat, seq, plbuffer, size);
+        int r = send_mseedx(myid.c_str(), '3', subformat, seq, plbuffer, size);
+
+        if(r < 0) throw PluginBrokenLink(strerror(errno));
+        else if(r == 0) throw PluginBrokenLink();
+
         return;
       }
 
@@ -881,9 +885,9 @@ void Station::process_mseed(MS3Record *msr, char *plbuffer, uint32_t size,
 
     int64_t tq = default_timing_quality;
 
-    if(mseh_exists(msr, "FDSN.Time.Quality"))
+    if(mseh_exists(msr, "/FDSN/Time/Quality"))
       {
-        int r = mseh_get_int64(msr, "FDSN.Time.Quality", &tq);
+        int r = mseh_get_int64(msr, "/FDSN/Time/Quality", &tq);
 
         if (r < 0 || r > 1 || tq < 0 || tq > 100)
           {
@@ -1512,16 +1516,16 @@ int StationGroup::process_slpacket(int fd, StationGroup_Partner &partner)
       {
         if ( msr->samplecnt == 0 )
           {
-            if ( mseh_exists(msr, "FDSN.Event.Detection" ) )
+            if ( mseh_exists(msr, "/FDSN/Event/Detection" ) )
                 subformat = 'E';
-            else if ( mseh_exists(msr, "FDSN.Calibration.Sequence" ) )
+            else if ( mseh_exists(msr, "/FDSN/Calibration/Sequence" ) )
                 subformat = 'C';
-            else if ( mseh_exists(msr, "FDSN.Time.Exception" ) )
+            else if ( mseh_exists(msr, "/FDSN/Time/Exception" ) )
                 subformat = 'T';
             else
                 subformat = 'O';  /* opaque */
           }
-        else if ( msr->samprate == 0.0 && msr->sampletype == 'a' )
+        else if ( msr->samprate == 0.0 )
           {
             subformat = 'L';      /* log */
           }
