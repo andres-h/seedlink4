@@ -38,6 +38,47 @@ enum InfoLevel {
 	INFO_CONNECTIONS
 };
 
+
+DEFINE_SMARTPOINTER(WindowInfo);
+class WindowInfo : public Core::BaseObject {
+	public:
+		WindowInfo(double slproto, const OPT(Core::Time) &start, const OPT(Core::Time) &end);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+		OPT(Core::Time) _start;
+		OPT(Core::Time) _end;
+};
+
+
+DEFINE_SMARTPOINTER(SelectorInfo);
+class SelectorInfo : public Core::BaseObject {
+	public:
+		SelectorInfo(double slproto, const std::string &pattern);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+		std::string _pattern;
+};
+
+
+DEFINE_SMARTPOINTER(CursorInfo);
+class CursorInfo : public Core::BaseObject {
+	public:
+		CursorInfo(double slproto, CursorPtr cursor);
+
+		void serialize(Core::Archive &ar);
+
+	private:
+		double _slproto;
+		CursorPtr _cursor;
+};
+
+
 DEFINE_SMARTPOINTER(StreamInfo);
 class StreamInfo : public Core::BaseObject {
 	public:

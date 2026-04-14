@@ -38,7 +38,9 @@ namespace Seedlink {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Cursor::Cursor(CursorOwner &owner, CursorClient &client, const std::string &ringName)
 : _owner(owner), _client(client), _ringName(ringName)
-, _seq(SEQ_UNSET), _dialup(false), _has_data(false), _eod(false) {
+, _seq(SEQ_UNSET), _dialup(false), _has_data(false), _eod(false)
+, _startseq(SEQ_UNSET), _startseq_valid(false), _gaps(0), _txcount(0) {
+	_ctime = Core::Time::Now();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -98,7 +100,7 @@ void Cursor::setDialup(bool dialup) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Cursor::setStart(Core::Time t) {
+void Cursor::setStart(const OPT(Core::Time) &t) {
 	_starttime = t;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -107,7 +109,7 @@ void Cursor::setStart(Core::Time t) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Cursor::setEnd(Core::Time t) {
+void Cursor::setEnd(const OPT(Core::Time) &t) {
 	_endtime = t;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -154,8 +156,8 @@ RecordPtr Cursor::next() {
 	while ( (rec = _owner.get(_seq)) != NULL ) {
 		_seq = rec->sequence() + 1;
 
-		if ( _starttime == Core::Time::Null || rec->endTime() >= _starttime ) {
-			if ( _endtime != Core::Time::Null && rec->startTime() > _endtime ) {
+		if ( !_starttime || rec->endTime() >= _starttime ) {
+			if ( !_endtime && rec->startTime() > _endtime ) {
 				_eod = true;
 				_owner.removeCursor(this);
 				return NULL;

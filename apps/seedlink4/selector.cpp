@@ -23,7 +23,7 @@ namespace Seedlink {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::initPattern(regex &r, const string &src, double slproto) {
+bool Selector::initRegex(regex &r, const string &src, double slproto) {
 	if ( !regex_match(src, regex("[A-Z0-9_\\?\\*]*")) )
 		return false;
 
@@ -42,18 +42,18 @@ bool Selector::initPattern(regex &r, const string &src, double slproto) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-bool Selector::init(const string &selstr, double slproto) {
+bool Selector::init(const string &pattern, double slproto) {
 	string stream = "*";
 	string fmt = "*";
 	string s;
 
-	if (selstr[0] == '!') {
+	if (pattern[0] == '!') {
 		_neg = true;
-		s = selstr.substr(1);
+		s = pattern.substr(1);
 	}
 	else {
 		_neg = false;
-		s = selstr;
+		s = pattern;
 	}
 
 	size_t p = s.find('.');
@@ -89,7 +89,7 @@ bool Selector::init(const string &selstr, double slproto) {
 		else if ( s.length() == 3 ) {
 			cha = s;
 		}
-		else if ( s.length() == 1 && selstr.length() == 1) {
+		else if ( s.length() == 1 && pattern.length() == 1) {
 			fmt = "2" + s;
 		}
 		else if ( s.length() != 0 ) {
@@ -102,8 +102,13 @@ bool Selector::init(const string &selstr, double slproto) {
 		stream = loc + "_" + cha[0] + "_" + cha[1] + "_" + cha[2];
 	}
 
-	return (initPattern(_rstream, stream, slproto) &&
-		initPattern(_rfmt, fmt, slproto));
+	if ( !initRegex(_rstream, stream, slproto) || !initRegex(_rfmt, fmt, slproto) ) {
+		return false;
+	}
+
+	_pattern = pattern;
+
+	return true;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 

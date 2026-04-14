@@ -29,16 +29,18 @@ namespace Seedlink {
 DEFINE_SMARTPOINTER(Selector);
 class Selector : public Core::BaseObject {
 	public:
-		bool init(const std::string &selstr, double slproto);
+		bool init(const std::string &pattern, double slproto);
 		bool match(RecordPtr rec);
 		bool negative() { return _neg; }
+		std::string pattern() { return _pattern; }
 
 	private:
 		bool _neg;
 		std::regex _rstream;
 		std::regex _rfmt;
+		std::string _pattern;
 
-		bool initPattern(std::regex &r, const std::string &s, double slproto);
+		bool initRegex(std::regex &r, const std::string &src, double slproto);
 };
 
 }

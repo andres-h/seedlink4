@@ -28,6 +28,7 @@
 
 #include <libmseed.h>
 
+#include "server.h"
 #include "session.h"
 #include "settings.h"
 #include "version.h"
@@ -54,8 +55,8 @@ class Station : public Core::BaseObject {
 		bool match(const string &s);
 		void setSequence(Sequence seq);
 		void setDialup(bool dialup);
-		void setStart(Core::Time t);
-		void setEnd(Core::Time t);
+		void setStart(const OPT(Core::Time) &t);
+		void setEnd(const OPT(Core::Time) &t);
 		bool select(const string &selstr, double slproto);
 		CursorPtr cursor(RingPtr ring, CursorClient &client, double slproto);
 
@@ -63,8 +64,8 @@ class Station : public Core::BaseObject {
 		regex _regex;
 		Sequence _seq;
 		bool _dialup;
-		Core::Time _starttime;
-		Core::Time _endtime;
+		OPT(Core::Time) _starttime;
+		OPT(Core::Time) _endtime;
 		std::list<SelectorPtr> _selectors;
 };
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -112,7 +113,7 @@ void Station::setDialup(bool dialup) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Station::setStart(Core::Time t) {
+void Station::setStart(const OPT(Core::Time) &t) {
 	_starttime = t;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -121,7 +122,7 @@ void Station::setStart(Core::Time t) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-void Station::setEnd(Core::Time t) {
+void Station::setEnd(const OPT(Core::Time) &t) {
 	_endtime = t;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -189,6 +190,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		};
 
 		Wired::Socket::IPAddress _ipaddress;
+		int _port;
 		double _slproto;
 		string _user;
 		string _useragent;
@@ -209,6 +211,8 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		bool _transfer;
 		bool _batch;
 
+		string host();
+		int port();
 		bool checkAccess(const string &station,
 				 const Wired::Socket::IPAddress &ip,
 				 const string &user);
@@ -275,6 +279,7 @@ SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 , _defaultAccess(defaultAccess), _access(access), _descriptions(descriptions)
 , _wildcard(false), _transfer(false), _batch(false) {
 	_ipaddress = sock->address();
+	_port = sock->port();
 	_currentStation = new Station();
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -284,6 +289,31 @@ SeedlinkSession::SeedlinkSession(Wired::Socket *sock,
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 SeedlinkSession::~SeedlinkSession() {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+string SeedlinkSession::host() {
+	char buf[50];  // must be at least 46
+	int len;
+
+	if ( (len = _ipaddress.toString(buf)) < 0 ) {
+		return "";
+	}
+
+	return string(buf, len);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+int SeedlinkSession::port() {
+	return _port;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -399,6 +429,11 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 			level = INFO_STREAMS;
 		}
 		else if ( tokLen == 11 && !strncasecmp(tok, "CONNECTIONS", tokLen) ) {
+			if ( !_trusted.check(_ipaddress, _user) ) {
+				infoError("UNAUTHORIZED", "requested info level is not allowed");
+				return;
+			}
+
 			level = INFO_CONNECTIONS;
 		}
 		else {
@@ -752,8 +787,8 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleDFT(const char *data, size_t len, int dft) {
 	_currentStation->setSequence(SEQ_UNSET);
-	_currentStation->setStart(Core::Time::Null);
-	_currentStation->setEnd(Core::Time::Null);
+	_currentStation->setStart(Core::None);
+	_currentStation->setEnd(Core::None);
 	_currentStation->setDialup(dft == 2);
 
 	const char *tok;
@@ -897,7 +932,8 @@ Core::Time SeedlinkSession::parseTime(const char *data, size_t len) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, const string &streamPattern) {
-	InfoPtr info = new Info(_slproto, SOFTWARE, global.organization, Core::Time(), level);
+	Core::Time started = dynamic_cast<Server*>(parent())->started();
+	InfoPtr info = new Info(_slproto, SOFTWARE, global.organization, started, level);
 
 	for ( auto cap : { CAPABILITIES } )
 		info->addCapability(cap);
@@ -941,17 +977,6 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, 
 		}
 	}
 
-	if ( level >= INFO_CONNECTIONS ) {
-		if ( !_trusted.check(_ipaddress, _user) ) {
-			infoError("UNAUTHORIZED", "requested info level is not allowed");
-			return;
-		}
-
-		// TODO
-		infoError("ARGUMENTS", "requested info level is not implemented");
-		return;
-	}
-
 	if ( _slproto >= 4.0) sendJSON(info, "I");
 	else sendMSXML(info, "INF");
 }
@@ -962,7 +987,8 @@ void SeedlinkSession::handleInfo(InfoLevel level, const string &stationPattern, 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::infoError(const string &code, const string &message) {
-	InfoPtr info = new InfoError(_slproto, SOFTWARE, global.organization, Core::Time(), code, message);
+	Core::Time started = dynamic_cast<Server*>(parent())->started();
+	InfoPtr info = new InfoError(_slproto, SOFTWARE, global.organization, started, code, message);
 
 	if ( _slproto >= 4.0) sendJSON(info, "E");
 	else sendMSXML(info, "ERR");

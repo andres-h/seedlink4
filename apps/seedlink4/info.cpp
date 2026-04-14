@@ -10,6 +10,8 @@
  * https://www.gnu.org/licenses/agpl-3.0.html.                             *
  ***************************************************************************/
 
+#include <seiscomp/core/strings.h>
+
 #include "info.h"
 
 using namespace std;
@@ -21,6 +23,150 @@ namespace Seedlink {
 
 
 #define ARCHIVE_FLAGS Core::Archive::STATIC_TYPE|Core::Archive::XML_MANDATORY
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+WindowInfo::WindowInfo(double slproto, const OPT(Core::Time) &start, const OPT(Core::Time) &end)
+: _slproto(slproto), _start(start), _end(end) {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void WindowInfo::serialize(Core::Archive &ar) {
+	string starttime, endtime;
+
+	if ( _start ) {
+		starttime = _start->toString("%Y/%m/%d %T.%4f");
+	}
+	else {
+		starttime = "unset";
+	}
+
+	if ( _end ) {
+		endtime = _end->toString("%Y/%m/%d %T.%4f");
+	}
+	else {
+		endtime = "unset";
+	}
+
+	ar & NAMED_OBJECT_HINT("begin_time", starttime, ARCHIVE_FLAGS);
+	ar & NAMED_OBJECT_HINT("end_time", endtime, ARCHIVE_FLAGS);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+SelectorInfo::SelectorInfo(double slproto, const string &pattern)
+: _slproto(slproto), _pattern(pattern) {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void SelectorInfo::serialize(Core::Archive &ar) {
+	ar & NAMED_OBJECT_HINT("pattern", _pattern, ARCHIVE_FLAGS);
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+CursorInfo::CursorInfo(double slproto, CursorPtr cursor)
+: _slproto(slproto), _cursor(cursor) {
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+void CursorInfo::serialize(Core::Archive &ar) {
+	string host = _cursor->_client.host();
+	int port = _cursor->_client.port();
+
+	if ( _slproto < 4.0 ) {
+		string ctime = _cursor->_ctime.toString("%Y/%m/%d %T.%4f");
+		string realtime = _cursor->_dialup? "no": "yes";
+		string eod = _cursor->_eod? "yes": "no";
+
+		string begin_seq;
+		if ( _cursor->_startseq != SEQ_UNSET ) {
+			begin_seq.resize(7);
+			snprintf(&begin_seq[0], 7, "%06llX", (long long unsigned int)_cursor->_startseq);
+		}
+		else {
+			begin_seq = "unset";
+		}
+
+		string current_seq;
+		if ( _cursor->_seq != SEQ_UNSET ) {
+			current_seq.resize(7);
+			snprintf(&current_seq[0], 7, "%06llX", (long long unsigned int)_cursor->_seq);
+		}
+		else {
+			current_seq = "unset";
+		}
+
+		ar & NAMED_OBJECT_HINT("host", host, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("port", port, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("ctime", ctime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("begin_seq", begin_seq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("current_seq", current_seq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("sequence_gaps", _cursor->_gaps, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("txcount", _cursor->_txcount, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("begin_seq_valid", _cursor->_startseq_valid, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("realtime", realtime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_of_data", _cursor->_eod, ARCHIVE_FLAGS);
+
+		if ( _cursor->_starttime || _cursor->_endtime ) {
+			WindowInfoPtr windowInfo = new WindowInfo(_slproto, _cursor->_starttime, _cursor->_endtime);
+			ar & NAMED_OBJECT_HINT("window", windowInfo, ARCHIVE_FLAGS);
+		}
+
+		vector<SelectorInfoPtr> selectors;
+		selectors.reserve(_cursor->_selectors.size());
+		for ( const auto &s : _cursor->_selectors ) {
+			selectors.push_back(new SelectorInfo(_slproto, s->pattern()) );
+		}
+
+		ar & NAMED_OBJECT_HINT("selector", selectors, ARCHIVE_FLAGS);
+	}
+	else {
+		bool realtime = !_cursor->_dialup;
+
+		ar & NAMED_OBJECT_HINT("host", host, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("port", port, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("ctime", _cursor->_ctime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("start_seq", (int64_t&)_cursor->_startseq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("current_seq", (int64_t&)_cursor->_seq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("sequence_gaps", _cursor->_gaps, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("txcount", _cursor->_txcount, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("start_seq_valid", _cursor->_startseq_valid, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("realtime", realtime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_of_data", _cursor->_eod, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("starttime", _cursor->_starttime, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("endtime", _cursor->_endtime, ARCHIVE_FLAGS);
+
+		vector<string> selectors;
+		selectors.reserve(_cursor->_selectors.size());
+		for ( const auto &s : _cursor->_selectors ) {
+			selectors.push_back( s->pattern() );
+		}
+
+		ar & NAMED_OBJECT_HINT("selector", selectors, ARCHIVE_FLAGS);
+	}
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -116,7 +262,7 @@ void RingInfo::serialize(Core::Archive &ar) {
 		ar & NAMED_OBJECT_HINT("backfill", _ring->_backfill, ARCHIVE_FLAGS);
 	}
 
-	if ( _level >= INFO_STREAMS ) {
+	if ( _level == INFO_STREAMS ) {
 		vector<StreamInfoPtr> streams;
 		streams.reserve(_ring->_streams.size());
 		for ( const auto &s : _ring->_streams ) {
@@ -125,6 +271,15 @@ void RingInfo::serialize(Core::Archive &ar) {
 		}
 
 		ar & NAMED_OBJECT_HINT("stream", streams, ARCHIVE_FLAGS);
+	}
+	else if ( _level == INFO_CONNECTIONS ) {
+		vector<CursorInfoPtr> cursors;
+		cursors.reserve(_ring->_cursors.size());
+		for ( const auto &c : _ring->_cursors ) {
+			cursors.push_back(new CursorInfo(_slproto, c));
+		}
+
+		ar & NAMED_OBJECT_HINT("connection", cursors, ARCHIVE_FLAGS);
 	}
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -234,7 +389,14 @@ void Info::addCapability(const string &name) {
 void Info::serialize(Core::Archive &ar) {
 	ar & NAMED_OBJECT_HINT("software", _software, ARCHIVE_FLAGS);
 	ar & NAMED_OBJECT_HINT("organization", _organization, ARCHIVE_FLAGS);
-	ar & NAMED_OBJECT_HINT("started", _started, Core::Archive::STATIC_TYPE);
+
+	if ( _slproto >= 4.0 ) {
+		ar & NAMED_OBJECT_HINT("started", _started, Core::Archive::STATIC_TYPE);
+	}
+	else {
+		string started = _started.toString("%Y/%m/%d %T.%4f");
+		ar & NAMED_OBJECT_HINT("started", started, Core::Archive::STATIC_TYPE);
+	}
 
 	if ( _level >= INFO_FORMATS && _slproto >= 4.0 ) {
 		FormatsInfoPtr formatsInfo = new FormatsInfo(_slproto);

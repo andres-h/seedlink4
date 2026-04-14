@@ -23,9 +23,14 @@ namespace Seedlink {
 
 
 class Server : public Seiscomp::Wired::Server {
+	private:
+		Core::Time _started;
+
 	public:
 		Server();
 		~Server();
+
+		Core::Time started();
 
 	protected:
 		virtual void sessionRemoved(Seiscomp::Wired::Session *session);

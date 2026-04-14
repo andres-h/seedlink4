@@ -36,6 +36,7 @@ class CursorClient;
 
 DEFINE_SMARTPOINTER(Cursor);
 class Cursor : public Core::BaseObject {
+	friend class CursorInfo;
 	public:
 		Cursor(CursorOwner &owner,
 		       CursorClient &client,
@@ -46,8 +47,8 @@ class Cursor : public Core::BaseObject {
 		std::string ringName();
 		void setSequence(Sequence seq, double slproto);
 		void setDialup(bool dialup);
-		void setStart(Core::Time t);
-		void setEnd(Core::Time t);
+		void setStart(const OPT(Core::Time) &t);
+		void setEnd(const OPT(Core::Time) &t);
 		void select(SelectorPtr sel);
 		RecordPtr next();
 		Sequence sequence();
@@ -64,9 +65,16 @@ class Cursor : public Core::BaseObject {
 		bool _dialup;
 		bool _has_data;
 		bool _eod;
-		Core::Time _starttime;
-		Core::Time _endtime;
+		OPT(Core::Time) _starttime;
+		OPT(Core::Time) _endtime;
 		std::list<SelectorPtr> _selectors;
+
+		// INFO CONNECTIONS
+		Core::Time _ctime;
+		Sequence _startseq;
+		bool _startseq_valid;
+		int _gaps;
+		int _txcount;
 
 		bool match(RecordPtr rec);
 };
@@ -74,6 +82,8 @@ class Cursor : public Core::BaseObject {
 
 class CursorClient {
 	public:
+		virtual std::string host() =0;
+		virtual int port() =0;
 		virtual void cursorAvail(CursorPtr c, Sequence _seq) =0;
 };
 
