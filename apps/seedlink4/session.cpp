@@ -47,6 +47,10 @@ namespace Seedlink {
 #define SOFTWARE "SeedLink v4.0 (" SEEDLINK4_VERSION_NAME ") :: SLPROTO:4.0"
 #define CAPABILITIES "AUTH:USERPASS", "TIME"
 
+#define MAX_STATIONS 10000
+#define MAX_WILDCARDS 100
+#define MAX_SELECTORS 100
+
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 DEFINE_SMARTPOINTER(Station);
 class Station : public Core::BaseObject {
@@ -137,6 +141,9 @@ bool Station::select(const string &selstr, double slproto) {
 		return true;
 	}
 
+	if ( _selectors.size() >= MAX_SELECTORS )
+		return false;
+
 	SelectorPtr sel = new Selector();
 	if ( !sel->init(selstr, slproto) )
 		return false;
@@ -178,9 +185,6 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 				const map<string, string> &descriptions);
 
 		~SeedlinkSession();
-
-		void stationAvail(const string &name);
-
 
 	private:
 		enum SessionType {
@@ -233,6 +237,7 @@ class SeedlinkSession : public Wired::ClientSession, private CursorClient {
 		void collectData();
 		void buffersFlushed() override;
 		void cursorAvail(CursorPtr c, Sequence seq);
+		void stationAvail(const string &name);
 };
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -381,7 +386,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 	if ( len == 0 )  // ignore empty command lines
 		return;
 
-	SEISCOMP_DEBUG("$ %s", data);
+	SEISCOMP_DEBUG("[%s:%d] > %s", host().c_str(), port(), data);
 
 	const char *tok;
 	size_t tokLen;
@@ -639,13 +644,21 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		}
 
 		if ( name.find('?') != string::npos || name.find('*') != string::npos ) {
-			// TODO: limit number of wildcard stations
+			if ( _wildcardStations.size() >= MAX_WILDCARDS ) {
+				sendResponse("ERROR ARGUMENTS too many wildcards");
+				return;
+			}
+
 			_currentStation->setPattern(name);
 			_wildcardStations.push_back(_currentStation);
 			_wildcard = true;
 		}
 		else {
-			// TODO: limit number of future stations
+			if ( _stations.size() >= MAX_STATIONS ) {
+				sendResponse("ERROR ARGUMENTS too many stations");
+				return;
+			}
+
 			_stations.insert(pair<string, StationPtr>(name, _currentStation));
 			_wildcard = false;
 		}
@@ -671,7 +684,7 @@ void SeedlinkSession::handleInbox(const char *data, size_t len) {
 		else {
 			while ( (tok = Core::tokenize(data, " ", len, tokLen)) != NULL ) {
 				if ( !_currentStation->select(string(tok, tokLen), _slproto) ) {
-					sendResponse("ERROR ARGUMENTS\r\n");
+					sendResponse("ERROR ARGUMENTS invalid pattern or too many selectors\r\n");
 					return;
 				}
 			}
@@ -1185,9 +1198,9 @@ void SeedlinkSession::handleFeed(const char *data, size_t len) {
 		}
 
 		if ( seq == SEQ_UNSET )
-			seq = ring->sequence();
+			seq = ring->endseq();
 		else if ( seq24bit )
-			seq = (ring->sequence() & ~0xffffffULL) | (seq & 0xffffff);
+			seq = (ring->endseq() & ~0xffffffULL) | (seq & 0xffffff);
 
 		if ( !ring->put(rec, seq) )
 			SEISCOMP_WARNING("dropped %s_%s.%s seq %lld",
@@ -1218,6 +1231,10 @@ void SeedlinkSession::sendResponse(const char *data) {
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void SeedlinkSession::sendResponse(const char *data, int len) {
+	int dbglen = len;
+	if ( dbglen && data[dbglen - 1] == '\n' ) --dbglen;
+	if ( dbglen && data[dbglen - 1] == '\r' ) --dbglen;
+	if ( dbglen ) SEISCOMP_DEBUG("[%s:%d] < %.*s", host().c_str(), port(), dbglen, data);
 	send(data, len);
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

@@ -92,7 +92,8 @@ class CursorOwner {
 	public:
 		virtual void removeCursor(Cursor* c) =0;
 		virtual RecordPtr get(Sequence seq) =0;
-		virtual Sequence sequence() =0;
+		virtual Sequence startseq() =0;
+		virtual Sequence endseq() =0;
 };
 
 
@@ -143,7 +144,8 @@ class Ring : public Core::BaseObject, private CursorOwner {
 		void save();
 		bool ensure(int nblocks, int blocksize);
 		bool put(RecordPtr buf, Sequence seq);
-		Sequence sequence();
+		Sequence startseq();
+		Sequence endseq();
 		CursorPtr cursor(CursorClient &client);
 
 	private:

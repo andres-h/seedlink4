@@ -95,12 +95,13 @@ void CursorInfo::serialize(Core::Archive &ar) {
 	if ( _slproto < 4.0 ) {
 		string ctime = _cursor->_ctime.toString("%Y/%m/%d %T.%4f");
 		string realtime = _cursor->_dialup? "no": "yes";
+		string begin_seq_valid = _cursor->_startseq_valid? "yes": "no";
 		string eod = _cursor->_eod? "yes": "no";
 
 		string begin_seq;
 		if ( _cursor->_startseq != SEQ_UNSET ) {
 			begin_seq.resize(7);
-			snprintf(&begin_seq[0], 7, "%06llX", (long long unsigned int)_cursor->_startseq);
+			snprintf(&begin_seq[0], 7, "%06lX", _cursor->_startseq & 0xffffff);
 		}
 		else {
 			begin_seq = "unset";
@@ -109,7 +110,7 @@ void CursorInfo::serialize(Core::Archive &ar) {
 		string current_seq;
 		if ( _cursor->_seq != SEQ_UNSET ) {
 			current_seq.resize(7);
-			snprintf(&current_seq[0], 7, "%06llX", (long long unsigned int)_cursor->_seq);
+			snprintf(&current_seq[0], 7, "%06lX", _cursor->_seq & 0xffffff);
 		}
 		else {
 			current_seq = "unset";
@@ -124,7 +125,7 @@ void CursorInfo::serialize(Core::Archive &ar) {
 		ar & NAMED_OBJECT_HINT("txcount", _cursor->_txcount, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("begin_seq_valid", _cursor->_startseq_valid, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("realtime", realtime, ARCHIVE_FLAGS);
-		ar & NAMED_OBJECT_HINT("end_of_data", _cursor->_eod, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("end_of_data", eod, ARCHIVE_FLAGS);
 
 		if ( _cursor->_starttime || _cursor->_endtime ) {
 			WindowInfoPtr windowInfo = new WindowInfo(_slproto, _cursor->_starttime, _cursor->_endtime);
@@ -239,25 +240,25 @@ void RingInfo::serialize(Core::Archive &ar) {
 		string net = _ring->_name.substr(0, sep);
 		string sta = _ring->_name.substr(sep + 1);
 
-		string baseseq;
-		baseseq.resize(7);
-		snprintf(&baseseq[0], 7, "%06llX", (long long unsigned int)_ring->_baseseq);
+		string startseq;
+		startseq.resize(7);
+		snprintf(&startseq[0], 7, "%06lX", _ring->_startseq & 0xffffff);
 
 		string endseq;
 		endseq.resize(7);
-		snprintf(&endseq[0], 7, "%06llX", (long long unsigned int)_ring->_endseq);
+		snprintf(&endseq[0], 7, "%06lX", _ring->_endseq & 0xffffff);
 
 		string enabled = "enabled";
 
 		ar & NAMED_OBJECT_HINT("name", sta, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("network", net, ARCHIVE_FLAGS);
-		ar & NAMED_OBJECT_HINT("begin_seq", baseseq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("begin_seq", startseq, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("end_seq", endseq, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("stream_check", enabled, ARCHIVE_FLAGS);
 	}
 	else {
 		ar & NAMED_OBJECT_HINT("id", _ring->_name, ARCHIVE_FLAGS);
-		ar & NAMED_OBJECT_HINT("start_seq", (int64_t&)_ring->_baseseq, ARCHIVE_FLAGS);
+		ar & NAMED_OBJECT_HINT("start_seq", (int64_t&)_ring->_startseq, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("end_seq", (int64_t&)_ring->_endseq, ARCHIVE_FLAGS);
 		ar & NAMED_OBJECT_HINT("backfill", _ring->_backfill, ARCHIVE_FLAGS);
 	}

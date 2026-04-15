@@ -68,22 +68,22 @@ string Cursor::ringName() {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 void Cursor::setSequence(Sequence seq, double slproto) {
 	if ( seq == SEQ_UNSET ) {
-		_seq = _owner.sequence();
+		_seq = _owner.endseq();
 	}
 	else {
 		if ( slproto < 4.0 ) {  // 24-bit sequence with wrap
-			_seq = (_owner.sequence() & ~0xffffffULL) | (seq & 0xffffff);
+			_seq = (_owner.endseq() & ~0xffffffULL) | (seq & 0xffffff);
 
-			if ( _seq > _owner.sequence() )
+			if ( _seq > _owner.endseq() )
 				_seq -= 0x1000000;
 		}
 		else {
 			_seq = seq;
-			
-			if ( _seq > _owner.sequence() )
-				_seq = _owner.sequence();
 		}
 	}
+
+	_startseq = _seq;
+	_startseq_valid = (_seq >= _owner.startseq() && seq <= _owner.endseq());
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
@@ -154,10 +154,13 @@ RecordPtr Cursor::next() {
 	RecordPtr rec;
 
 	while ( (rec = _owner.get(_seq)) != NULL ) {
-		_seq = rec->sequence() + 1;
-
 		if ( !_starttime || rec->endTime() >= _starttime ) {
-			if ( !_endtime && rec->startTime() > _endtime ) {
+			if ( _seq != rec->sequence() )
+				++_gaps;
+
+			_seq = rec->sequence() + 1;
+
+			if ( _endtime && rec->startTime() > _endtime ) {
 				_eod = true;
 				_owner.removeCursor(this);
 				return NULL;
@@ -167,11 +170,18 @@ RecordPtr Cursor::next() {
 				continue;
 
 			_has_data = true;
+			++_txcount;
 			return rec;
+		}
+		else {
+			_seq = rec->sequence() + 1;
 		}
 	}
 
-	_seq = _owner.sequence();
+	if ( _seq != _owner.endseq() )
+		++_gaps;
+
+	_seq = _owner.endseq();
 
 	if ( _dialup && _has_data ) {
 		_eod = true;
@@ -442,6 +452,8 @@ bool Ring::load() {
 	_sb = new boost::iostreams::stream_buffer<boost::iostreams::mapped_file>(p);
 
 	if ( recover ) {
+		SEISCOMP_INFO("Recovering %s", jsonfile.c_str());
+
 		_shift = 0;
 		_baseseq = 0;
 		_startseq = SEQ_UNSET;
@@ -711,7 +723,16 @@ RecordPtr Ring::get(Sequence seq) {
 
 
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Sequence Ring::sequence() {
+Sequence Ring::startseq() {
+	return _startseq;
+}
+// <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+
+
+
+// >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Sequence Ring::endseq() {
 	return _endseq;
 }
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
