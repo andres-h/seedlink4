@@ -63,7 +63,6 @@ class Cursor : public Core::BaseObject {
 		Sequence _seq;
 		bool _seq24bit;
 		bool _dialup;
-		bool _has_data;
 		bool _eod;
 		OPT(Core::Time) _starttime;
 		OPT(Core::Time) _endtime;

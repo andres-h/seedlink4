@@ -38,7 +38,7 @@ namespace Seedlink {
 // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 Cursor::Cursor(CursorOwner &owner, CursorClient &client, const std::string &ringName)
 : _owner(owner), _client(client), _ringName(ringName)
-, _seq(SEQ_UNSET), _dialup(false), _has_data(false), _eod(false)
+, _seq(SEQ_UNSET), _dialup(false), _eod(false)
 , _startseq(SEQ_UNSET), _startseq_valid(false), _gaps(0), _txcount(0) {
 	_ctime = Core::Time::Now();
 }
@@ -169,7 +169,6 @@ RecordPtr Cursor::next() {
 			if ( !match(rec) )
 				continue;
 
-			_has_data = true;
 			++_txcount;
 			return rec;
 		}
@@ -183,7 +182,7 @@ RecordPtr Cursor::next() {
 
 	_seq = _owner.endseq();
 
-	if ( _dialup && _has_data ) {
+	if ( _dialup ) {
 		_eod = true;
 		_owner.removeCursor(this);
 	}
