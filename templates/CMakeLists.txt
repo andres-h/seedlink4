@@ -1,7 +1,0 @@
-INSTALL(
-	DIRECTORY .
-	DESTINATION ${SC3_PACKAGE_SHARE_DIR}/templates/seedlink
-	PATTERN ".svn" EXCLUDE
-	PATTERN "CMakeLists.txt" EXCLUDE
-)
-
